@@ -1,0 +1,7 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python -c \"import src.golf.terrain; import src.golf.club; import src.golf.ball; import src.golf.shot; import src.utils.math_utils; import src.course.hole; print\\('All imports OK'\\)\")"
+    ]
+  }
+}
