@@ -75,6 +75,12 @@ class CourseCanvas:
         self._tile_cache: dict    = {}          # (id,sc,sr,px) → Surface
         self._overlay_surf        = None        # single-tile SRCALPHA surface
 
+        # ── Tee / Pin positions ───────────────────────────────────────────────
+        self.tee_pos: tuple[int, int] | None = None
+        self.pin_pos: tuple[int, int] | None = None
+        self._set_mode: str | None = None   # 'tee' | 'pin' | None
+        self._marker_font: pygame.font.Font | None = None
+
         # ── Interaction state ─────────────────────────────────────────────────
         self.hovered_tile          = None       # (col, row) or None
         self._painting             = False
@@ -99,12 +105,26 @@ class CourseCanvas:
         if self._zoom_index > 0:
             self._zoom_at_screen_centre(self._zoom_index - 1)
 
+    @property
+    def set_mode(self) -> str | None:
+        return self._set_mode
+
+    def enter_set_mode(self, mode: str) -> None:
+        """Arm tee ('tee') or pin ('pin') placement — next canvas click places it."""
+        self._set_mode = mode
+
+    def clear_set_mode(self) -> None:
+        self._set_mode = None
+
     def reset(self, rows: int = 36, cols: int = 48):
         """Clear both grids and reset zoom/pan."""
         self.rows = rows
         self.cols = cols
         self.visual_grid    = [[None] * cols for _ in range(rows)]
         self.attribute_grid = [["R"]  * cols for _ in range(rows)]
+        self.tee_pos        = None
+        self.pin_pos        = None
+        self._set_mode      = None
         self._tile_cache.clear()
         self._overlay_surf = None
         self._zoom_index   = DEFAULT_ZOOM_INDEX
@@ -155,6 +175,16 @@ class CourseCanvas:
                 self._pan_start_offset = (self._ox, self._oy)
                 return True
             if event.button == 1:
+                # Tee / pin placement mode — consume click without painting
+                if self._set_mode:
+                    tile = self._screen_to_tile(event.pos)
+                    if tile:
+                        if self._set_mode == "tee":
+                            self.tee_pos = tile
+                        else:
+                            self.pin_pos = tile
+                        self._set_mode = None
+                    return True
                 if keys[pygame.K_f]:
                     # Flood fill — attribute layer when A held, else visual
                     tile = self._screen_to_tile(event.pos)
@@ -265,6 +295,23 @@ class CourseCanvas:
             hl.fill((255, 255, 255, 50))
             surface.blit(hl, (hx, hy))
 
+        # Tee / pin position markers
+        if self.tee_pos is not None:
+            tc, tr = self.tee_pos
+            if 0 <= tc < self.cols and 0 <= tr < self.rows:
+                sx = self.rect.x + int((tc * BASE_TILE - self._ox) * z)
+                sy = self.rect.y + int((tr * BASE_TILE - self._oy) * z)
+                self._draw_marker(surface, sx, sy, display_px,
+                                  (30, 190, 30), "T")
+
+        if self.pin_pos is not None:
+            pc, pr = self.pin_pos
+            if 0 <= pc < self.cols and 0 <= pr < self.rows:
+                sx = self.rect.x + int((pc * BASE_TILE - self._ox) * z)
+                sy = self.rect.y + int((pr * BASE_TILE - self._oy) * z)
+                self._draw_marker(surface, sx, sy, display_px,
+                                  (210, 40, 40), "P")
+
         surface.set_clip(old_clip)
 
     # ── Internal draw helpers ─────────────────────────────────────────────────
@@ -281,6 +328,22 @@ class CourseCanvas:
         else:
             pygame.draw.rect(surface, (35, 35, 35),
                              (sx, sy, display_px, display_px))
+
+    def _draw_marker(self, surface, sx, sy, display_px, color, label):
+        """Overlay a small coloured square + letter at (sx, sy) for tee/pin."""
+        size = max(4, min(display_px, 16))
+        mx   = sx + (display_px - size) // 2
+        my   = sy + (display_px - size) // 2
+        pygame.draw.rect(surface, color, (mx, my, size, size))
+        pygame.draw.rect(surface, (0, 0, 0), (mx, my, size, size), 1)
+        if size >= 10:
+            if self._marker_font is None:
+                self._marker_font = pygame.font.SysFont("monospace", 10, bold=True)
+            ts = self._marker_font.render(label, True, (0, 0, 0))
+            surface.blit(ts, (
+                mx + (size - ts.get_width())  // 2,
+                my + (size - ts.get_height()) // 2,
+            ))
 
     def _draw_grid(self, surface, z, col_min, col_max, row_min, row_max):
         color = (55, 55, 55)
