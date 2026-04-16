@@ -26,11 +26,15 @@ BALL_RADIUS = 5
 # Maximum height of the flight arc in pixels (at the midpoint of the trajectory).
 ARC_HEIGHT = 35
 
+# How long the ball takes to shrink into the cup.
+SINK_DURATION = 0.45
+
 
 class BallState(Enum):
     AT_REST  = auto()   # Sitting still, waiting for player input
     FLYING   = auto()   # Mid-air, being animated toward landing spot
-    IN_HOLE  = auto()   # Holed — round is complete
+    SINKING  = auto()   # Shrinking into the cup
+    IN_HOLE  = auto()   # Fully holed — round is complete
 
 
 class Ball:
@@ -53,6 +57,11 @@ class Ball:
         self._flight_timer    = 0.0
         self._flight_duration = BASE_FLIGHT_DURATION
         self._is_putt         = False
+
+        # Sink animation bookkeeping
+        self._sink_timer = 0.0
+        self._pin_x      = 0.0
+        self._pin_y      = 0.0
 
     # ── Public interface ───────────────────────────────────────────────────────
 
@@ -92,6 +101,16 @@ class Ball:
         Advance the ball's animation.
         pin_world_pos: (x, y) world-pixel position of the hole.
         """
+        if self.state == BallState.SINKING:
+            self._sink_timer += dt
+            # Glide toward pin centre as it sinks
+            t = clamp(self._sink_timer / SINK_DURATION, 0.0, 1.0)
+            self.x = self.x + (self._pin_x - self.x) * t * 0.15
+            self.y = self.y + (self._pin_y - self.y) * t * 0.15
+            if self._sink_timer >= SINK_DURATION:
+                self.state = BallState.IN_HOLE
+            return
+
         if self.state != BallState.FLYING:
             return
 
@@ -114,11 +133,14 @@ class Ball:
             self.y = self._target_y
             self.state = BallState.AT_REST
 
-            # Check if close enough to the pin to be holed
+            # Check if close enough to the pin to begin sinking
             px, py = pin_world_pos
             dist = math.sqrt((self.x - px) ** 2 + (self.y - py) ** 2)
             if dist <= HOLE_CAPTURE_RADIUS:
-                self.state = BallState.IN_HOLE
+                self.state    = BallState.SINKING
+                self._sink_timer = 0.0
+                self._pin_x   = px
+                self._pin_y   = py
 
     # ── Drawing ───────────────────────────────────────────────────────────────
 
@@ -128,7 +150,17 @@ class Ball:
         camera_x/y: the top-left world position currently visible (scroll offset).
         """
         if self.state == BallState.IN_HOLE:
-            return  # Ball disappears once it drops into the cup
+            return  # Ball has fully dropped — nothing to draw
+
+        # Sinking: shrink the ball into the cup over SINK_DURATION
+        if self.state == BallState.SINKING:
+            t = clamp(self._sink_timer / SINK_DURATION, 0.0, 1.0)
+            r = max(1, int(BALL_RADIUS * (1.0 - t)))
+            sx = int(self.x - camera_x)
+            sy = int(self.y - camera_y)
+            pygame.draw.circle(surface, (245, 245, 245), (sx, sy), r)
+            pygame.draw.circle(surface, (160, 160, 160), (sx, sy), r, 1)
+            return
 
         arc_offset = self._get_arc_offset()
 

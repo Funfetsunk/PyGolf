@@ -13,6 +13,7 @@ Layout
 """
 
 import math
+import random
 
 import pygame
 
@@ -85,9 +86,10 @@ class GolfRoundState:
         self.message       = ""
         self.message_timer = 0.0
 
-        # Last safe ball position (for water drop)
-        self._last_safe_x = tee_wx
-        self._last_safe_y = tee_wy
+        # Last safe ball position (for water drop / tree bounce)
+        self._last_safe_x        = tee_wx
+        self._last_safe_y        = tee_wy
+        self._bounce_in_progress = False   # True while tree-bounce is animating
 
         self._auto_select_club()
 
@@ -194,6 +196,11 @@ class GolfRoundState:
                 and self.ball.state == BallState.AT_REST):
             self._on_ball_landed()
 
+        # Tree-bounce completed — ball came to rest after bouncing out
+        if self._bounce_in_progress and self.ball.state == BallState.AT_REST:
+            self._bounce_in_progress = False
+            self._auto_select_club()
+
         if self.ball.state == BallState.IN_HOLE:
             self.hole_complete  = True
             self.complete_timer = 0.0
@@ -208,6 +215,30 @@ class GolfRoundState:
         self.shot_ctrl.on_ball_landed()
         terrain = self._ball_terrain()
 
+        # ── Tree bounce ───────────────────────────────────────────────────────
+        if terrain == Terrain.TREES:
+            dx = self._last_safe_x - self.ball.x
+            dy = self._last_safe_y - self.ball.y
+            dist = math.sqrt(dx * dx + dy * dy)
+            if dist > 0:
+                # Direction back toward safe ground, with a random angular spread
+                angle = math.atan2(dy, dx) + random.uniform(-0.4, 0.4)
+                # Bounce 25–45 % of the way back
+                bounce_px = dist * random.uniform(0.25, 0.45)
+                world_w, world_h = self.renderer.world_size()
+                bx = clamp(self.ball.x + math.cos(angle) * bounce_px,
+                           0, world_w - 1)
+                by = clamp(self.ball.y + math.sin(angle) * bounce_px,
+                           0, world_h - 1)
+                self.ball.hit(bx, by, is_putt=False)
+                self._bounce_in_progress = True
+            else:
+                # Edge case: ball somehow landed exactly on last safe spot
+                self._auto_select_club()
+            self._show_message("Ball caught in the trees!", 2.5)
+            return
+
+        # ── Water hazard ──────────────────────────────────────────────────────
         if terrain == Terrain.WATER:
             self.strokes += 1
             self._show_message("Water hazard! +1 penalty stroke", 2.8)
