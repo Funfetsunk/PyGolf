@@ -13,9 +13,11 @@ class Game:
         self.screen = screen
         self.state_stack = []
 
-        # Phase 1: jump straight into the golf round
+        # Phase 2: load the full 18-hole course and start at hole 1
+        from src.data.courses_data import make_greenfields_course
         from src.states.golf_round import GolfRoundState
-        self.state_stack.append(GolfRoundState(self))
+        course = make_greenfields_course()
+        self.state_stack.append(GolfRoundState(self, course, hole_index=0, scores=[]))
 
     # ── State management ──────────────────────────────────────────────────────
 
