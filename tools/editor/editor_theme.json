@@ -1,0 +1,27 @@
+{
+    "button": {
+        "colours": {
+            "normal_bg": "#3C3C3C",
+            "hovered_bg": "#505050",
+            "active_bg": "#4A6FA5",
+            "disabled_bg": "#2A2A2A",
+            "normal_text": "#DCDCDC",
+            "hovered_text": "#FFFFFF",
+            "active_text": "#FFFFFF",
+            "disabled_text": "#888888",
+            "normal_border": "#555555",
+            "hovered_border": "#666666",
+            "active_border": "#4A6FA5"
+        },
+        "misc": {
+            "border_width": "1",
+            "shadow_width": "0"
+        }
+    },
+    "label": {
+        "colours": {
+            "normal_text": "#DCDCDC",
+            "normal_bg": "#00000000"
+        }
+    }
+}

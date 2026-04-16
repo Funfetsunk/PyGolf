@@ -192,6 +192,14 @@ class GolfRoundState:
 
         self.ball.update(dt, self._pin_world_pos())
 
+        # ── Mid-flight tree collision ─────────────────────────────────────────
+        # Check on every frame while airborne — trees block the ball immediately
+        # rather than waiting for it to land on the other side.
+        if self.ball.state == BallState.FLYING:
+            if self._ball_terrain() == Terrain.TREES:
+                self._handle_tree_collision()
+
+        # ── Normal landing ────────────────────────────────────────────────────
         if (self.shot_ctrl.state == ShotState.EXECUTING
                 and self.ball.state == BallState.AT_REST):
             self._on_ball_landed()
@@ -211,31 +219,71 @@ class GolfRoundState:
         if self.message_timer > 0:
             self.message_timer -= dt
 
+    def _handle_tree_collision(self):
+        """
+        Ball has entered tree terrain mid-flight.
+        Walk backward along the trajectory until we find the tree boundary,
+        place the ball there, then launch a bounce back toward open ground.
+        """
+        # Step back from current position toward the shot origin until
+        # we land on non-tree terrain — that is the impact point.
+        start_x = self.ball._start_x
+        start_y = self.ball._start_y
+        dx = start_x - self.ball.x
+        dy = start_y - self.ball.y
+        total = math.sqrt(dx * dx + dy * dy)
+
+        impact_x, impact_y = self.ball.x, self.ball.y   # fallback
+
+        if total > 0:
+            ndx, ndy = dx / total, dy / total
+            step = max(1.0, self.tile_sz * 0.5)
+            steps = int(total / step) + 4
+            for i in range(1, steps):
+                tx = self.ball.x + ndx * step * i
+                ty = self.ball.y + ndy * step * i
+                if self.hole.get_terrain_at_pixel(tx, ty, self.tile_sz) != Terrain.TREES:
+                    impact_x, impact_y = tx, ty
+                    break
+
+        # Plant the ball at the tree edge
+        self.ball.place(impact_x, impact_y)
+
+        if self._bounce_in_progress:
+            # The bounce itself flew into trees — just stop here, no further bounce
+            self._bounce_in_progress = False
+            self._auto_select_club()
+        else:
+            # Initial shot — reset controller and send ball bouncing back
+            self.shot_ctrl.on_ball_landed()
+            self._do_tree_bounce()
+
+        self._show_message("Ball blocked by the trees!", 2.5)
+
+    def _do_tree_bounce(self):
+        """Launch the ball back from the trees toward safe ground."""
+        dx = self._last_safe_x - self.ball.x
+        dy = self._last_safe_y - self.ball.y
+        dist = math.sqrt(dx * dx + dy * dy)
+        if dist > 0:
+            angle      = math.atan2(dy, dx) + random.uniform(-0.4, 0.4)
+            bounce_px  = dist * random.uniform(0.25, 0.45)
+            world_w, world_h = self.renderer.world_size()
+            bx = clamp(self.ball.x + math.cos(angle) * bounce_px, 0, world_w - 1)
+            by = clamp(self.ball.y + math.sin(angle) * bounce_px, 0, world_h - 1)
+            self.ball.hit(bx, by, is_putt=False)
+            self._bounce_in_progress = True
+        else:
+            self._auto_select_club()
+
     def _on_ball_landed(self):
         self.shot_ctrl.on_ball_landed()
         terrain = self._ball_terrain()
 
-        # ── Tree bounce ───────────────────────────────────────────────────────
+        # Trees: mid-flight check should catch this first, but handle as fallback
         if terrain == Terrain.TREES:
-            dx = self._last_safe_x - self.ball.x
-            dy = self._last_safe_y - self.ball.y
-            dist = math.sqrt(dx * dx + dy * dy)
-            if dist > 0:
-                # Direction back toward safe ground, with a random angular spread
-                angle = math.atan2(dy, dx) + random.uniform(-0.4, 0.4)
-                # Bounce 25–45 % of the way back
-                bounce_px = dist * random.uniform(0.25, 0.45)
-                world_w, world_h = self.renderer.world_size()
-                bx = clamp(self.ball.x + math.cos(angle) * bounce_px,
-                           0, world_w - 1)
-                by = clamp(self.ball.y + math.sin(angle) * bounce_px,
-                           0, world_h - 1)
-                self.ball.hit(bx, by, is_putt=False)
-                self._bounce_in_progress = True
-            else:
-                # Edge case: ball somehow landed exactly on last safe spot
-                self._auto_select_club()
-            self._show_message("Ball caught in the trees!", 2.5)
+            self._do_tree_bounce()
+            self._show_message("Ball blocked by the trees!", 2.5)
             return
 
         # ── Water hazard ──────────────────────────────────────────────────────
