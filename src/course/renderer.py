@@ -24,7 +24,7 @@ import pygame
 from src.golf.terrain import Terrain, TERRAIN_PROPS
 from src.utils.tileset import TilesetManager
 
-TILE_SIZE = 20
+TILE_SIZE = 32
 
 # Path to the tileset folder relative to the project root
 _ASSETS_DIR = os.path.join(
@@ -44,12 +44,11 @@ def _make_procedural_tile(terrain, tile_size, seed):
     surf = pygame.Surface((ts, ts))
 
     if terrain == Terrain.FAIRWAY:
-        _stripe(surf, ts, light=(82, 162, 78), dark=(68, 140, 64), width=4)
+        _stripe(surf, ts, light=(82, 162, 78), dark=(68, 140, 64), width=8)
     elif terrain == Terrain.TEE:
-        _stripe(surf, ts, light=(118, 215, 108), dark=(100, 192, 90), width=4)
-        pygame.draw.rect(surf, (185, 240, 180), (0, 0, ts, ts), 1)
+        _stripe(surf, ts, light=(118, 215, 108), dark=(100, 192, 90), width=8)
     elif terrain == Terrain.GREEN:
-        _stripe(surf, ts, light=(130, 232, 118), dark=(112, 208, 100), width=5)
+        _stripe(surf, ts, light=(130, 232, 118), dark=(112, 208, 100), width=8)
     elif terrain == Terrain.ROUGH:
         _noisy_fill(surf, ts, rng, base=(44, 112, 42), spread=18)
         _grass_blades(surf, ts, rng, color=(62, 138, 58), count=5)
@@ -158,10 +157,6 @@ def _make_tile(terrain, tile_size, seed, tileset: TilesetManager):
             v     = abs(noise)
             flag  = pygame.BLEND_RGB_ADD if noise > 0 else pygame.BLEND_RGB_SUB
             result.fill((v, v, v), special_flags=flag)
-
-        # TEE gets a white 1-px border to mark it as a special area
-        if terrain == Terrain.TEE:
-            pygame.draw.rect(result, (200, 230, 200), (0, 0, tile_size, tile_size), 1)
 
         return result
 

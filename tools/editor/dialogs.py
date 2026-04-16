@@ -65,7 +65,7 @@ def ask_save_file(initial_dir="data/courses"):
 
 # ── Course data helpers ───────────────────────────────────────────────────────
 
-def make_empty_hole(cols: int = 48, rows: int = 36, number: int = 1) -> dict:
+def make_empty_hole(cols: int = 80, rows: int = 60, number: int = 1) -> dict:
     """Return a blank hole dict with Python-format visual grid (None values)."""
     return {
         "number":       number,
@@ -81,7 +81,7 @@ def make_empty_hole(cols: int = 48, rows: int = 36, number: int = 1) -> dict:
     }
 
 
-def make_empty_course(rows: int = 36, cols: int = 48) -> dict:
+def make_empty_course(rows: int = 60, cols: int = 80) -> dict:
     """Return a fresh course dict with one blank hole."""
     return {
         "version": 2,

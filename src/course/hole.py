@@ -9,7 +9,7 @@ Each character maps to a Terrain via CHAR_TO_TERRAIN:
     B = Bunker        W = Water        T = Trees/OOB    G = Green
 
 Scale: each tile represents 10 yards.
-       tile_size pixels per tile is set in the renderer (default 20 px).
+       tile_size pixels per tile is set in the renderer (default 32 px).
 
 Positions are stored as (col, row) tile indices.
 """
@@ -61,8 +61,8 @@ def make_hole_1():
     Two bunkers flank the fairway at the approach.
     Two more bunkers sit mid-fairway to punish offline drives.
 
-    Grid: 48 cols × 36 rows, each tile = 10 yards = 20 screen pixels.
-    Total world size: 960 × 720 px  (fills the course viewport exactly).
+    Grid: 48 cols × 36 rows, each tile = 10 yards = 32 screen pixels.
+    Total world size: 1536 × 1152 px  (larger than the 960×720 viewport — camera scrolls).
 
     Tile positions
     ──────────────

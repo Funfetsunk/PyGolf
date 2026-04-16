@@ -2,13 +2,13 @@
 TilesetManager — loads tileset PNGs from assets/tilemaps/ and extracts
 individual tiles for use in the course renderer.
 
-All 16x16 source tiles are scaled to TILE_SIZE (20 px) on extraction.
+All 32x32 source tiles are used at native size (32 px) with no scaling.
 
 Usage
 ─────
     from src.utils.tileset import TilesetManager
     mgr = TilesetManager()
-    surf = mgr.get(terrain)   # returns a 20x20 pygame.Surface
+    surf = mgr.get(terrain)   # returns a 32x32 pygame.Surface
 """
 
 import os
@@ -16,7 +16,7 @@ import pygame
 from src.golf.terrain import Terrain
 
 # Source tile size in the PNG sheets
-SOURCE_TILE = 16
+SOURCE_TILE = 32
 
 # Map: terrain → (sheet_filename_stem, col, row, brightness_delta)
 # brightness_delta: positive = lighten (BLEND_ADD), negative = darken (BLEND_SUB)
@@ -49,12 +49,12 @@ class TilesetManager:
         self._tiles:  dict[Terrain, pygame.Surface] = {}
         self._ready = False
 
-    def load(self, assets_dir: str, tile_size: int = 20):
+    def load(self, assets_dir: str, tile_size: int = 32):
         """
         Load all sheets and pre-extract terrain tiles.
 
         assets_dir : path to the directory containing the tileset PNGs
-        tile_size  : target tile size in pixels (default 20, matches TILE_SIZE)
+        tile_size  : target tile size in pixels (default 32, matches TILE_SIZE)
         """
         sheets_needed = {"Hills", "Tilled_Dirt", "Water"}
         for stem in sheets_needed:
