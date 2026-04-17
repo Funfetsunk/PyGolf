@@ -17,10 +17,13 @@ FADE curves it right. Straight goes true.
 
 import math
 import random
+from collections import namedtuple
 from enum import Enum, auto
 
 from src.golf.terrain import Terrain, TERRAIN_PROPS
 from src.utils.math_utils import normalize, clamp
+
+ShotResult = namedtuple('ShotResult', ['target_x', 'target_y', 'aim_x', 'aim_y', 'shape_x', 'shape_y'])
 
 # How far (px) the player must drag to reach 100% power.
 MAX_DRAG_PIXELS = 130
@@ -136,13 +139,22 @@ class ShotController:
         scatter_range = (1.0 - effective_accuracy) * shot_dist_px * 0.18
         scatter = random.uniform(-scatter_range, scatter_range)
 
-        # Final landing position in world coordinates
+        # Straight aim point (no shape, no wind)
         bx, by = ball_world_pos
-        target_x = bx + dir_x * shot_dist_px + perp_x * (shape_offset_px + scatter)
-        target_y = by + dir_y * shot_dist_px + perp_y * (shape_offset_px + scatter)
+        aim_x = bx + dir_x * shot_dist_px
+        aim_y = by + dir_y * shot_dist_px
+
+        # Shape + scatter as perpendicular offset (applied quadratically by ball.py)
+        total_offset = shape_offset_px + scatter
+        shape_x = perp_x * total_offset
+        shape_y = perp_y * total_offset
+
+        # Actual landing position (wind added separately in golf_round.py)
+        target_x = aim_x + shape_x
+        target_y = aim_y + shape_y
 
         self.state = ShotState.EXECUTING
-        return (target_x, target_y)
+        return ShotResult(target_x, target_y, aim_x, aim_y, shape_x, shape_y)
 
     def on_ball_landed(self):
         """Call this when the ball finishes its flight animation."""

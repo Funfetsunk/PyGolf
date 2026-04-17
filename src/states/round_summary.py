@@ -66,6 +66,15 @@ class RoundSummaryState:
 
         self.scorecard = Scorecard(course)
 
+        # Log and save if a player profile exists
+        if game.player is not None:
+            game.player.log_round(course.name, sum(scores), course.par)
+            try:
+                from src.utils.save_system import save_game
+                save_game(game.player)
+            except Exception as e:
+                print(f"Auto-save failed: {e}")
+
         self.font_title  = pygame.font.SysFont("arial", 42, bold=True)
         self.font_large  = pygame.font.SysFont("arial", 30, bold=True)
         self.font_medium = pygame.font.SysFont("arial", 20)
@@ -79,13 +88,16 @@ class RoundSummaryState:
             230,
             sc_w, sc_h)
 
-        # Play Again button
-        btn_w, btn_h = 280, 52
-        self.btn_play_again = pygame.Rect(
-            SCREEN_W // 2 - btn_w // 2,
-            SCREEN_H - 76,
-            btn_w, btn_h)
-        self._btn_hover = False
+        # Play Again / Return to Menu buttons
+        btn_w, btn_h = 260, 52
+        gap = 20
+        total = btn_w * 2 + gap
+        bx = SCREEN_W // 2 - total // 2
+        by = SCREEN_H - 76
+        self.btn_play_again = pygame.Rect(bx + btn_w + gap, by, btn_w, btn_h)
+        self.btn_menu       = pygame.Rect(bx,               by, btn_w, btn_h)
+        self._hover_play    = False
+        self._hover_menu    = False
 
     # ── Computed stats ────────────────────────────────────────────────────────
 
@@ -133,17 +145,24 @@ class RoundSummaryState:
         if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
             if self.btn_play_again.collidepoint(event.pos):
                 self._play_again()
+            elif self.btn_menu.collidepoint(event.pos):
+                self._return_to_menu()
         elif event.type == pygame.KEYDOWN:
             if event.key in (pygame.K_RETURN, pygame.K_SPACE, pygame.K_r):
                 self._play_again()
+            elif event.key == pygame.K_ESCAPE:
+                self._return_to_menu()
         elif event.type == pygame.MOUSEMOTION:
-            self._btn_hover = self.btn_play_again.collidepoint(event.pos)
+            self._hover_play = self.btn_play_again.collidepoint(event.pos)
+            self._hover_menu = self.btn_menu.collidepoint(event.pos)
 
     def _play_again(self):
-        """Start a brand-new round on the same course."""
         from src.states.golf_round import GolfRoundState
-        self.game.change_state(
-            GolfRoundState(self.game, self.course, 0, []))
+        self.game.change_state(GolfRoundState(self.game, self.course, 0, []))
+
+    def _return_to_menu(self):
+        from src.states.main_menu import MainMenuState
+        self.game.change_state(MainMenuState(self.game))
 
     # ── Update ────────────────────────────────────────────────────────────────
 
@@ -231,10 +250,17 @@ class RoundSummaryState:
         pygame.draw.line(surface, C_BORDER,
                          (60, div_y), (SCREEN_W - 60, div_y))
 
-        # ── Play Again button ─────────────────────────────────────────────────
-        btn_color = C_BTN_HOV if self._btn_hover else C_BTN
-        pygame.draw.rect(surface, btn_color, self.btn_play_again, border_radius=8)
-        pygame.draw.rect(surface, C_GREEN,   self.btn_play_again, 2, border_radius=8)
-        btn_lbl = self.font_medium.render(
-            "Play Again  (Enter / R)", True, C_WHITE)
-        surface.blit(btn_lbl, btn_lbl.get_rect(center=self.btn_play_again.center))
+        # ── Buttons ───────────────────────────────────────────────────────────
+        # Return to Menu
+        menu_bg = (55, 30, 30) if self._hover_menu else (38, 20, 20)
+        pygame.draw.rect(surface, menu_bg,  self.btn_menu, border_radius=8)
+        pygame.draw.rect(surface, C_RED,    self.btn_menu, 2, border_radius=8)
+        ml = self.font_medium.render("Main Menu  (Esc)", True, C_WHITE)
+        surface.blit(ml, ml.get_rect(center=self.btn_menu.center))
+
+        # Play Again
+        play_bg = C_BTN_HOV if self._hover_play else C_BTN
+        pygame.draw.rect(surface, play_bg,  self.btn_play_again, border_radius=8)
+        pygame.draw.rect(surface, C_GREEN,  self.btn_play_again, 2, border_radius=8)
+        pl = self.font_medium.render("Play Again  (Enter)", True, C_WHITE)
+        surface.blit(pl, pl.get_rect(center=self.btn_play_again.center))

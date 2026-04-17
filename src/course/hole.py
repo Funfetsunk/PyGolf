@@ -20,15 +20,18 @@ from src.golf.terrain import Terrain, CHAR_TO_TERRAIN
 class Hole:
     """A single golf hole."""
 
-    def __init__(self, number, par, yardage, tee_pos, pin_pos, grid):
-        self.number   = number     # Hole number (1-18)
-        self.par      = par        # Par for this hole
-        self.yardage  = yardage    # Tee-to-pin distance in yards
-        self.tee_pos  = tee_pos    # (col, row) tile of the tee marker
-        self.pin_pos  = pin_pos    # (col, row) tile of the pin/hole
-        self.grid     = grid       # list[str], row-major terrain grid
-        self.rows     = len(grid)
-        self.cols     = len(grid[0]) if grid else 0
+    def __init__(self, number, par, yardage, tee_pos, pin_pos, grid,
+                 visual_grid=None, tilesets=None):
+        self.number      = number      # Hole number (1-18)
+        self.par         = par         # Par for this hole
+        self.yardage     = yardage     # Tee-to-pin distance in yards
+        self.tee_pos     = tee_pos     # (col, row) tile of the tee marker
+        self.pin_pos     = pin_pos     # (col, row) tile of the pin/hole
+        self.grid        = grid        # list[str], row-major terrain grid
+        self.rows        = len(grid)
+        self.cols        = len(grid[0]) if grid else 0
+        self.visual_grid = visual_grid # list[list[(id,col,row)|None]] or None
+        self.tilesets    = tilesets    # dict {id: pygame.Surface} or None
 
     def get_terrain_at(self, col, row):
         """

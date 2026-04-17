@@ -91,6 +91,16 @@ class HolePanel:
         self._btn_add_hole = btn("+ Hole", 6,   362, 95)
         self._btn_del_hole = btn("- Hole", 113, 362, 95)
 
+        # ── Copy hole ─────────────────────────────────────────────────────────
+        self._btn_copy_hole = btn("Copy Hole →", 6, 394, w - 12)
+
+        # ── Grid size ─────────────────────────────────────────────────────────
+        self._cols_entry = entry(52, 448, 60)
+        self._cols_entry.set_text("48")
+        self._rows_entry = entry(52, 476, 60)
+        self._rows_entry.set_text("36")
+        self._btn_resize = btn("Resize Grid", 6, 504, w - 12)
+
         # Pre-build the 18-slot hole-grid rects (constant positions)
         self._hole_btn_rects: list[pygame.Rect] = self._build_hole_rects()
 
@@ -101,6 +111,20 @@ class HolePanel:
         self._par_entry.set_text(str(hole_data.get("par", 4)))
         self._yds_entry.set_text(str(hole_data.get("yardage", 0)))
         self._si_entry.set_text(str(hole_data.get("stroke_index", 1)))
+        self._cols_entry.set_text(str(hole_data.get("grid_cols", 48)))
+        self._rows_entry.set_text(str(hole_data.get("grid_rows", 36)))
+
+    def get_grid_size(self) -> tuple[int, int]:
+        """Return (cols, rows) from the grid-size entry fields."""
+        try:
+            cols = max(8, min(200, int(self._cols_entry.get_text())))
+        except ValueError:
+            cols = 48
+        try:
+            rows = max(8, min(200, int(self._rows_entry.get_text())))
+        except ValueError:
+            rows = 36
+        return cols, rows
 
     def populate_course(self, course_meta: dict, total_holes: int,
                         hole_index: int) -> None:
@@ -150,7 +174,8 @@ class HolePanel:
         """
         Returns an action string or None:
           'prev_hole', 'next_hole', 'add_hole', 'del_hole',
-          'arm_tee', 'arm_pin', 'go_hole:<0-based index>'
+          'arm_tee', 'arm_pin', 'go_hole:<0-based index>',
+          'copy_hole', 'resize_grid'
         """
         if event.type == pygame_gui.UI_BUTTON_PRESSED:
             elem = event.ui_element
@@ -166,6 +191,10 @@ class HolePanel:
                 return "add_hole"
             if elem == self._btn_del_hole:
                 return "del_hole"
+            if elem == self._btn_copy_hole:
+                return "copy_hole"
+            if elem == self._btn_resize:
+                return "resize_grid"
 
         # Hole grid click (handled manually — not a pygame_gui element)
         if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
@@ -231,6 +260,20 @@ class HolePanel:
 
         # Hole grid
         self._draw_hole_grid(surface)
+
+        # ── COPY HOLE ─────────────────────────────────────────────────────────
+        sep3_y = r.y + 390
+        pygame.draw.line(surface, C_SEP, (r.x, sep3_y), (r.right, sep3_y))
+
+        # ── GRID SIZE ─────────────────────────────────────────────────────────
+        sep4_y = r.y + 422
+        pygame.draw.line(surface, C_SEP, (r.x, sep4_y), (r.right, sep4_y))
+        self._section_header(surface, "GRID SIZE", r.y + 424)
+
+        for label, entry_y in [("Cols:", 448), ("Rows:", 476)]:
+            s  = self._font.render(label, True, C_LABEL)
+            ly = r.y + entry_y + (24 - s.get_height()) // 2
+            surface.blit(s, (r.x + 6, ly))
 
     # ── Internal helpers ──────────────────────────────────────────────────────
 

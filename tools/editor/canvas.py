@@ -16,26 +16,34 @@ Controls
 ────────
   Left-click / drag          → paint active visual brush
   A + left-click / drag      → paint active attribute brush
+  Shift + left-drag          → rectangle fill (visual; Shift+A = attribute)
   F + left-click             → flood fill (A held = attribute layer)
   Right-click                → eyedropper (samples visual or attribute)
+  Ctrl+Z                     → undo (up to 50 steps)
+  Ctrl+Y / Ctrl+Shift+Z      → redo
   Middle-click / Space+drag  → pan
   Scroll wheel               → zoom
 """
 
 import pygame
 from collections import deque
+from copy import deepcopy
 
 from src.golf.terrain import Terrain, TERRAIN_PROPS, CHAR_TO_TERRAIN
 from tools.editor.auto_derive import derive as _auto_derive
 
-SOURCE_TILE = 32
-BASE_TILE   = 32
+SOURCE_TILE        = 32
+BASE_TILE          = 32
 
-ZOOM_LEVELS       = [0.5, 1.0, 1.5, 2.0, 3.0, 4.0, 6.0, 8.0]
-DEFAULT_ZOOM_INDEX = 1   # 1.0×
+ZOOM_LEVELS        = [0.5, 1.0, 1.5, 2.0, 3.0, 4.0, 6.0, 8.0]
+DEFAULT_ZOOM_INDEX = 1
 
-# Opacity of the attribute overlay in 'both' mode (0–255)
 OVERLAY_ALPHA = 110
+MAX_UNDO      = 50
+
+_MINI_MAX_W  = 200
+_MINI_MAX_H  = 150
+_MINI_MARGIN = 8
 
 
 class CourseCanvas:
@@ -63,31 +71,42 @@ class CourseCanvas:
         self.attribute_grid = [["R"]  * cols for _ in range(rows)]
 
         # ── Active brushes ────────────────────────────────────────────────────
-        self.active_brush     = None            # (id, sc, sr) visual tile
-        self.active_attribute = Terrain.ROUGH   # attribute brush
+        self.active_brush     = None
+        self.active_attribute = Terrain.ROUGH
 
         # ── Display options ───────────────────────────────────────────────────
-        self.show_grid         = True
-        self.view_mode         = "both"         # 'visual' | 'attributes' | 'both'
+        self.show_grid           = True
+        self.view_mode           = "both"
         self.auto_derive_enabled = True
 
         # ── Caches ────────────────────────────────────────────────────────────
-        self._tile_cache: dict    = {}          # (id,sc,sr,px) → Surface
-        self._overlay_surf        = None        # single-tile SRCALPHA surface
+        self._tile_cache: dict = {}
+        self._overlay_surf     = None
 
-        # ── Tee / Pin positions ───────────────────────────────────────────────
+        # ── Tee / Pin ─────────────────────────────────────────────────────────
         self.tee_pos: tuple[int, int] | None = None
         self.pin_pos: tuple[int, int] | None = None
-        self._set_mode: str | None = None   # 'tee' | 'pin' | None
-        self._marker_font: pygame.font.Font | None = None
+        self._set_mode: str | None  = None
+        self._marker_font           = None
+
+        # ── Undo / Redo ───────────────────────────────────────────────────────
+        self._undo_stack: deque          = deque()
+        self._redo_stack: deque          = deque()
+        self._stroke_snapshot_taken: bool = False
+
+        # ── Rect selection (Shift+drag) ────────────────────────────────────────
+        self._rect_start: tuple[int, int] | None = None
+        self._rect_end:   tuple[int, int] | None = None
+        self._rect_attr:  bool = False
 
         # ── Interaction state ─────────────────────────────────────────────────
-        self.hovered_tile          = None       # (col, row) or None
-        self._painting             = False
-        self._painting_attribute   = False      # True when A is held during paint
-        self._panning              = False
-        self._pan_start_mouse      = (0, 0)
-        self._pan_start_offset     = (0.0, 0.0)
+        self.hovered_tile        = None
+        self._painting           = False
+        self._painting_attribute = False
+        self._erasing            = False
+        self._panning            = False
+        self._pan_start_mouse    = (0, 0)
+        self._pan_start_offset   = (0.0, 0.0)
 
         self._center_on_world()
 
@@ -110,14 +129,12 @@ class CourseCanvas:
         return self._set_mode
 
     def enter_set_mode(self, mode: str) -> None:
-        """Arm tee ('tee') or pin ('pin') placement — next canvas click places it."""
         self._set_mode = mode
 
     def clear_set_mode(self) -> None:
         self._set_mode = None
 
     def reset(self, rows: int = 36, cols: int = 48):
-        """Clear both grids and reset zoom/pan."""
         self.rows = rows
         self.cols = cols
         self.visual_grid    = [[None] * cols for _ in range(rows)]
@@ -126,18 +143,22 @@ class CourseCanvas:
         self.pin_pos        = None
         self._set_mode      = None
         self._tile_cache.clear()
-        self._overlay_surf = None
-        self._zoom_index   = DEFAULT_ZOOM_INDEX
+        self._overlay_surf  = None
+        self._zoom_index    = DEFAULT_ZOOM_INDEX
+        self._undo_stack.clear()
+        self._redo_stack.clear()
+        self._stroke_snapshot_taken = False
+        self._rect_start = None
+        self._rect_end   = None
+        self._erasing    = False
         self._center_on_world()
 
     def load_grids(self, visual_grid, attribute_grid=None):
-        """Load both layers from deserialized data."""
         self.rows        = len(visual_grid)
         self.cols        = len(visual_grid[0]) if visual_grid else 0
         self.visual_grid = visual_grid
 
         if attribute_grid and len(attribute_grid) == self.rows:
-            # Validate each cell character
             valid = set(CHAR_TO_TERRAIN.keys())
             self.attribute_grid = [
                 [c if c in valid else "R" for c in row]
@@ -148,10 +169,85 @@ class CourseCanvas:
 
         self._tile_cache.clear()
         self._overlay_surf = None
+        self._undo_stack.clear()
+        self._redo_stack.clear()
+        self._stroke_snapshot_taken = False
 
-    # Keep backward-compatible alias used by editor_app from Phase E1
     def load_visual_grid(self, visual_grid):
         self.load_grids(visual_grid)
+
+    def resize(self, new_cols: int, new_rows: int):
+        """Resize the canvas grids, preserving existing content (top-left anchored)."""
+        self.push_undo()
+        new_visual = [[None] * new_cols for _ in range(new_rows)]
+        new_attrs  = [["R"]  * new_cols for _ in range(new_rows)]
+        copy_rows  = min(self.rows, new_rows)
+        copy_cols  = min(self.cols, new_cols)
+        for r in range(copy_rows):
+            for c in range(copy_cols):
+                new_visual[r][c] = self.visual_grid[r][c]
+                new_attrs[r][c]  = self.attribute_grid[r][c]
+        self.rows           = new_rows
+        self.cols           = new_cols
+        self.visual_grid    = new_visual
+        self.attribute_grid = new_attrs
+        # Clamp markers that would fall outside the new bounds
+        if self.tee_pos and (self.tee_pos[0] >= new_cols or self.tee_pos[1] >= new_rows):
+            self.tee_pos = None
+        if self.pin_pos and (self.pin_pos[0] >= new_cols or self.pin_pos[1] >= new_rows):
+            self.pin_pos = None
+        self._tile_cache.clear()
+        self._overlay_surf = None
+        self._clamp_offset()
+
+    # ── Undo / Redo ───────────────────────────────────────────────────────────
+
+    def push_undo(self):
+        """Save current state to undo stack (max MAX_UNDO entries)."""
+        snapshot = (
+            deepcopy(self.visual_grid),
+            deepcopy(self.attribute_grid),
+            self.tee_pos,
+            self.pin_pos,
+        )
+        self._undo_stack.append(snapshot)
+        if len(self._undo_stack) > MAX_UNDO:
+            self._undo_stack.popleft()
+        self._redo_stack.clear()
+
+    def undo(self) -> bool:
+        if not self._undo_stack:
+            return False
+        self._redo_stack.append((
+            deepcopy(self.visual_grid),
+            deepcopy(self.attribute_grid),
+            self.tee_pos,
+            self.pin_pos,
+        ))
+        vg, ag, tee, pin = self._undo_stack.pop()
+        self.visual_grid    = vg
+        self.attribute_grid = ag
+        self.tee_pos = tee
+        self.pin_pos = pin
+        self._tile_cache.clear()
+        return True
+
+    def redo(self) -> bool:
+        if not self._redo_stack:
+            return False
+        self._undo_stack.append((
+            deepcopy(self.visual_grid),
+            deepcopy(self.attribute_grid),
+            self.tee_pos,
+            self.pin_pos,
+        ))
+        vg, ag, tee, pin = self._redo_stack.pop()
+        self.visual_grid    = vg
+        self.attribute_grid = ag
+        self.tee_pos = tee
+        self.pin_pos = pin
+        self._tile_cache.clear()
+        return True
 
     # ── Event handling ────────────────────────────────────────────────────────
 
@@ -174,28 +270,46 @@ class CourseCanvas:
                 self._pan_start_mouse  = event.pos
                 self._pan_start_offset = (self._ox, self._oy)
                 return True
+
             if event.button == 1:
-                # Tee / pin placement mode — consume click without painting
                 if self._set_mode:
                     tile = self._screen_to_tile(event.pos)
                     if tile:
+                        self.push_undo()
                         if self._set_mode == "tee":
                             self.tee_pos = tile
                         else:
                             self.pin_pos = tile
                         self._set_mode = None
                     return True
-                if keys[pygame.K_f]:
-                    # Flood fill — attribute layer when A held, else visual
+
+                shift = keys[pygame.K_LSHIFT] or keys[pygame.K_RSHIFT]
+                if shift:
                     tile = self._screen_to_tile(event.pos)
                     if tile:
+                        self._rect_start = tile
+                        self._rect_end   = tile
+                        self._rect_attr  = bool(keys[pygame.K_a])
+                elif keys[pygame.K_f]:
+                    tile = self._screen_to_tile(event.pos)
+                    if tile:
+                        self.push_undo()
                         self._flood_fill(tile[0], tile[1],
                                          use_attribute=keys[pygame.K_a])
+                elif keys[pygame.K_e]:
+                    self._painting              = True
+                    self._erasing               = True
+                    self._painting_attribute    = False
+                    self._stroke_snapshot_taken = False
+                    self._paint_at(event.pos)
                 else:
-                    self._painting           = True
-                    self._painting_attribute = keys[pygame.K_a]
+                    self._painting               = True
+                    self._painting_attribute     = keys[pygame.K_a]
+                    self._erasing                = False
+                    self._stroke_snapshot_taken  = False
                     self._paint_at(event.pos)
                 return True
+
             if event.button == 3:
                 self._eyedrop_at(event.pos)
                 return True
@@ -214,14 +328,29 @@ class CourseCanvas:
                 self._oy = self._pan_start_offset[1] - dy / z
                 self._clamp_offset()
                 return True
+
+            if self._rect_start is not None:
+                tile = self._screen_to_tile(event.pos)
+                if tile:
+                    self._rect_end = tile
+                return True
+
             if self._painting and self.rect.collidepoint(event.pos):
                 self._paint_at(event.pos)
                 return True
 
         if event.type == pygame.MOUSEBUTTONUP:
+            if event.button == 1:
+                if self._rect_start is not None and self._rect_end is not None:
+                    self.push_undo()
+                    self._fill_rect(self._rect_start, self._rect_end, self._rect_attr)
+                self._rect_start            = None
+                self._rect_end              = None
+                self._painting              = False
+                self._erasing               = False
+                self._stroke_snapshot_taken = False
             if event.button in (1, 2):
-                self._painting = False
-                self._panning  = False
+                self._panning = False
 
         return False
 
@@ -236,14 +365,12 @@ class CourseCanvas:
         z          = self.zoom
         display_px = max(1, int(BASE_TILE * z))
 
-        # Ensure the overlay surface matches current display_px
         if self.view_mode == "both":
             if (self._overlay_surf is None or
                     self._overlay_surf.get_width() != display_px):
                 self._overlay_surf = pygame.Surface(
                     (display_px, display_px), pygame.SRCALPHA)
 
-        # Visible tile range
         col_min = max(0, int(self._ox // BASE_TILE))
         col_max = min(self.cols,
                       int((self._ox + self.rect.width  / z) // BASE_TILE) + 2)
@@ -262,16 +389,12 @@ class CourseCanvas:
                 attr_color = TERRAIN_PROPS[attr_terr]["color"]
 
                 if self.view_mode == "visual":
-                    self._draw_visual_tile(surface, cell, sx, sy,
-                                           display_px, tilesets)
-
+                    self._draw_visual_tile(surface, cell, sx, sy, display_px, tilesets)
                 elif self.view_mode == "attributes":
                     pygame.draw.rect(surface, attr_color,
                                      (sx, sy, display_px, display_px))
-
-                else:  # 'both'
-                    self._draw_visual_tile(surface, cell, sx, sy,
-                                           display_px, tilesets)
+                else:
+                    self._draw_visual_tile(surface, cell, sx, sy, display_px, tilesets)
                     self._overlay_surf.fill((*attr_color, OVERLAY_ALPHA))
                     surface.blit(self._overlay_surf, (sx, sy))
 
@@ -282,7 +405,6 @@ class CourseCanvas:
         bh = int(self.rows * BASE_TILE * z)
         pygame.draw.rect(surface, (70, 70, 70), (bx, by, bw, bh), 1)
 
-        # Grid lines
         if self.show_grid and z >= 0.75:
             self._draw_grid(surface, z, col_min, col_max, row_min, row_max)
 
@@ -295,22 +417,27 @@ class CourseCanvas:
             hl.fill((255, 255, 255, 50))
             surface.blit(hl, (hx, hy))
 
-        # Tee / pin position markers
+        # Rect-fill selection preview
+        if self._rect_start is not None and self._rect_end is not None:
+            self._draw_rect_selection(surface, z, display_px)
+
+        # Tee / pin markers
         if self.tee_pos is not None:
             tc, tr = self.tee_pos
             if 0 <= tc < self.cols and 0 <= tr < self.rows:
                 sx = self.rect.x + int((tc * BASE_TILE - self._ox) * z)
                 sy = self.rect.y + int((tr * BASE_TILE - self._oy) * z)
-                self._draw_marker(surface, sx, sy, display_px,
-                                  (30, 190, 30), "T")
+                self._draw_marker(surface, sx, sy, display_px, (30, 190, 30), "T")
 
         if self.pin_pos is not None:
             pc, pr = self.pin_pos
             if 0 <= pc < self.cols and 0 <= pr < self.rows:
                 sx = self.rect.x + int((pc * BASE_TILE - self._ox) * z)
                 sy = self.rect.y + int((pr * BASE_TILE - self._oy) * z)
-                self._draw_marker(surface, sx, sy, display_px,
-                                  (210, 40, 40), "P")
+                self._draw_marker(surface, sx, sy, display_px, (210, 40, 40), "P")
+
+        # Minimap
+        self._draw_minimap(surface)
 
         surface.set_clip(old_clip)
 
@@ -322,7 +449,6 @@ class CourseCanvas:
             if tile_surf is not None:
                 surface.blit(tile_surf, (sx, sy))
             else:
-                # Missing tileset → magenta error block
                 pygame.draw.rect(surface, (160, 40, 160),
                                  (sx, sy, display_px, display_px))
         else:
@@ -330,7 +456,6 @@ class CourseCanvas:
                              (sx, sy, display_px, display_px))
 
     def _draw_marker(self, surface, sx, sy, display_px, color, label):
-        """Overlay a small coloured square + letter at (sx, sy) for tee/pin."""
         size = max(4, min(display_px, 16))
         mx   = sx + (display_px - size) // 2
         my   = sy + (display_px - size) // 2
@@ -353,6 +478,82 @@ class CourseCanvas:
         for row in range(row_min, row_max + 1):
             y = self.rect.y + int((row * BASE_TILE - self._oy) * z)
             pygame.draw.line(surface, color, (self.rect.left, y), (self.rect.right, y))
+
+    def _draw_rect_selection(self, surface, z, display_px):
+        c0, r0 = self._rect_start
+        c1, r1 = self._rect_end
+        col_min, col_max = min(c0, c1), max(c0, c1)
+        row_min, row_max = min(r0, r1), max(r0, r1)
+
+        sx = self.rect.x + int((col_min * BASE_TILE - self._ox) * z)
+        sy = self.rect.y + int((row_min * BASE_TILE - self._oy) * z)
+        sw = int((col_max - col_min + 1) * BASE_TILE * z)
+        sh = int((row_max - row_min + 1) * BASE_TILE * z)
+
+        color = (80, 140, 255) if not self._rect_attr else (255, 180, 60)
+        overlay = pygame.Surface((max(1, sw), max(1, sh)), pygame.SRCALPHA)
+        overlay.fill((*color, 45))
+        surface.blit(overlay, (sx, sy))
+        pygame.draw.rect(surface, color, (sx, sy, sw, sh), 2)
+
+        if self._marker_font is None:
+            self._marker_font = pygame.font.SysFont("monospace", 10, bold=True)
+        w_count = col_max - col_min + 1
+        h_count = row_max - row_min + 1
+        lbl = self._marker_font.render(f"{w_count}×{h_count}", True, color)
+        surface.blit(lbl, (sx + 3, sy + 3))
+
+    def _draw_minimap(self, surface: pygame.Surface):
+        if self.rows == 0 or self.cols == 0:
+            return
+
+        scale  = min(_MINI_MAX_W / (self.cols * BASE_TILE),
+                     _MINI_MAX_H / (self.rows * BASE_TILE))
+        map_w  = max(1, int(self.cols * BASE_TILE * scale))
+        map_h  = max(1, int(self.rows * BASE_TILE * scale))
+        tile_w = max(1, int(BASE_TILE * scale))
+        tile_h = max(1, int(BASE_TILE * scale))
+
+        mini = pygame.Surface((map_w, map_h))
+        mini.fill((20, 20, 20))
+
+        for row in range(self.rows):
+            for col in range(self.cols):
+                char  = self.attribute_grid[row][col]
+                terr  = CHAR_TO_TERRAIN.get(char, Terrain.ROUGH)
+                color = TERRAIN_PROPS[terr]["color"]
+                mx    = int(col * BASE_TILE * scale)
+                my    = int(row * BASE_TILE * scale)
+                pygame.draw.rect(mini, color, (mx, my, tile_w, tile_h))
+
+        # Tee marker
+        if self.tee_pos is not None:
+            tc, tr = self.tee_pos
+            mx = max(2, min(map_w - 3, int((tc * BASE_TILE + BASE_TILE // 2) * scale)))
+            my = max(2, min(map_h - 3, int((tr * BASE_TILE + BASE_TILE // 2) * scale)))
+            pygame.draw.circle(mini, (0, 0, 0),    (mx, my), 4)
+            pygame.draw.circle(mini, (40, 220, 40), (mx, my), 3)
+
+        # Pin marker
+        if self.pin_pos is not None:
+            pc, pr = self.pin_pos
+            mx = max(2, min(map_w - 3, int((pc * BASE_TILE + BASE_TILE // 2) * scale)))
+            my = max(2, min(map_h - 3, int((pr * BASE_TILE + BASE_TILE // 2) * scale)))
+            pygame.draw.circle(mini, (0, 0, 0),    (mx, my), 4)
+            pygame.draw.circle(mini, (220, 40, 40), (mx, my), 3)
+
+        # Viewport box
+        vp_x = max(0, int(self._ox * scale))
+        vp_y = max(0, int(self._oy * scale))
+        vp_w = max(2, min(map_w - vp_x, int((self.rect.width  / self.zoom) * scale)))
+        vp_h = max(2, min(map_h - vp_y, int((self.rect.height / self.zoom) * scale)))
+        pygame.draw.rect(mini, (200, 200, 200), (vp_x, vp_y, vp_w, vp_h), 1)
+
+        dest_x = self.rect.right  - map_w - _MINI_MARGIN
+        dest_y = self.rect.bottom - map_h - _MINI_MARGIN
+        surface.blit(mini, (dest_x, dest_y))
+        pygame.draw.rect(surface, (90, 90, 90),
+                         pygame.Rect(dest_x - 1, dest_y - 1, map_w + 2, map_h + 2), 1)
 
     # ── Tile cache ────────────────────────────────────────────────────────────
 
@@ -392,12 +593,18 @@ class CourseCanvas:
             return
         col, row = tile
 
-        if self._painting_attribute:
+        if not self._stroke_snapshot_taken:
+            self.push_undo()
+            self._stroke_snapshot_taken = True
+
+        if self._erasing:
+            self.visual_grid[row][col]    = None
+            self.attribute_grid[row][col] = "R"
+        elif self._painting_attribute:
             self.attribute_grid[row][col] = self.active_attribute.value
         else:
             if self.active_brush is not None:
                 self.visual_grid[row][col] = self.active_brush
-                # Auto-derive attribute from the tile just painted
                 if self.auto_derive_enabled:
                     tid, sc, sr = self.active_brush
                     terrain = _auto_derive(tid, sc, sr)
@@ -405,7 +612,6 @@ class CourseCanvas:
                         self.attribute_grid[row][col] = terrain.value
 
     def _eyedrop_at(self, pos):
-        """Sample the tile (or attribute) under pos and set as active brush."""
         tile = self._screen_to_tile(pos)
         if tile is None:
             return
@@ -419,21 +625,33 @@ class CourseCanvas:
         else:
             self.active_brush = self.visual_grid[row][col]
 
-    def _flood_fill(self, col: int, row: int, use_attribute: bool):
-        """
-        BFS flood fill starting at (col, row).
+    def _fill_rect(self, start: tuple, end: tuple, use_attribute: bool):
+        c0, r0 = start
+        c1, r1 = end
+        col_min, col_max = min(c0, c1), max(c0, c1)
+        row_min, row_max = min(r0, r1), max(r0, r1)
+        for row in range(row_min, row_max + 1):
+            for col in range(col_min, col_max + 1):
+                if use_attribute:
+                    self.attribute_grid[row][col] = self.active_attribute.value
+                else:
+                    if self.active_brush is not None:
+                        self.visual_grid[row][col] = self.active_brush
+                        if self.auto_derive_enabled:
+                            tid, sc, sr = self.active_brush
+                            terrain = _auto_derive(tid, sc, sr)
+                            if terrain is not None:
+                                self.attribute_grid[row][col] = terrain.value
 
-        use_attribute=True  → fills attribute_grid with active_attribute
-        use_attribute=False → fills visual_grid  with active_brush
-        """
+    def _flood_fill(self, col: int, row: int, use_attribute: bool):
         if use_attribute:
-            grid      = self.attribute_grid
-            target    = grid[row][col]
-            fill_val  = self.active_attribute.value
+            grid     = self.attribute_grid
+            target   = grid[row][col]
+            fill_val = self.active_attribute.value
         else:
-            grid      = self.visual_grid
-            target    = grid[row][col]
-            fill_val  = self.active_brush
+            grid     = self.visual_grid
+            target   = grid[row][col]
+            fill_val = self.active_brush
 
         if fill_val is None or fill_val == target:
             return

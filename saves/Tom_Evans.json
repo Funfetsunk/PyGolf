@@ -1,0 +1,38 @@
+{
+  "save_format": 1,
+  "player": {
+    "version": 1,
+    "name": "Tom Evans",
+    "nationality": "Welsh",
+    "money": 500,
+    "tour_level": 1,
+    "season": 1,
+    "events_played": 1,
+    "stats": {
+      "power": 65,
+      "accuracy": 57,
+      "short_game": 55,
+      "putting": 53,
+      "mental": 50,
+      "fitness": 50
+    },
+    "club_names": [
+      "Driver",
+      "3-Wood",
+      "5-Iron",
+      "7-Iron",
+      "9-Iron",
+      "Pitching Wedge",
+      "Sand Wedge",
+      "Putter"
+    ],
+    "career_log": [
+      {
+        "course": "Greenfields Golf Club",
+        "strokes": 50,
+        "par": 72,
+        "diff": -22
+      }
+    ]
+  }
+}

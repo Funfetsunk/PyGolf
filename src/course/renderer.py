@@ -26,6 +26,9 @@ from src.utils.tileset import TilesetManager
 
 TILE_SIZE = 32
 
+# Must match tools/editor/canvas.py SOURCE_TILE so visual-layer extraction aligns
+_SOURCE_TILE = 32
+
 # Path to the tileset folder relative to the project root
 _ASSETS_DIR = os.path.join(
     os.path.dirname(__file__),   # src/course/
@@ -187,6 +190,7 @@ class CourseRenderer:
             self._tileset.load(assets_dir, tile_size=TILE_SIZE)
 
         self._course_surface = None
+        self._visual_cache: dict = {}
         self._build_course_surface()
 
     # ── Build ─────────────────────────────────────────────────────────────────
@@ -198,11 +202,24 @@ class CourseRenderer:
         self._course_surface = pygame.Surface((width, height))
 
         ts = self.tile_size
+        has_visual = (self.hole.visual_grid is not None
+                      and self.hole.tilesets is not None)
         for row in range(self.hole.rows):
             for col in range(self.hole.cols):
                 terrain = self.hole.get_terrain_at(col, row)
                 seed    = col * 10007 + row * 37 + hash(terrain.value)
-                tile    = _make_tile(terrain, ts, seed, self._tileset)
+
+                tile = None
+                if (has_visual
+                        and row < len(self.hole.visual_grid)
+                        and col < len(self.hole.visual_grid[row])):
+                    cell = self.hole.visual_grid[row][col]
+                    if cell is not None:
+                        tile = self._get_visual_tile(cell, ts)
+
+                if tile is None:
+                    tile = _make_tile(terrain, ts, seed, self._tileset)
+
                 self._course_surface.blit(tile, (col * ts, row * ts))
 
         self._draw_border_shadows()
@@ -267,6 +284,27 @@ class CourseRenderer:
         for ox in (-8, 8):
             pygame.draw.circle(self._course_surface, (255, 255, 255), (cx + ox, cy), 3)
             pygame.draw.circle(self._course_surface, (140, 180, 140), (cx + ox, cy), 3, 1)
+
+    def _get_visual_tile(self, cell, display_px) -> pygame.Surface | None:
+        """Extract and cache a tile from the hole's loaded tileset surfaces."""
+        tid, sc, sr = cell
+        sheet = self.hole.tilesets.get(tid)
+        if sheet is None:
+            return None
+        key = (tid, sc, sr, display_px)
+        if key not in self._visual_cache:
+            src = pygame.Rect(sc * _SOURCE_TILE, sr * _SOURCE_TILE,
+                              _SOURCE_TILE, _SOURCE_TILE)
+            if src.right > sheet.get_width() or src.bottom > sheet.get_height():
+                self._visual_cache[key] = None
+            else:
+                raw = sheet.subsurface(src)
+                if display_px != _SOURCE_TILE:
+                    scaled = pygame.transform.scale(raw, (display_px, display_px))
+                    self._visual_cache[key] = scaled.convert()
+                else:
+                    self._visual_cache[key] = raw.copy().convert()
+        return self._visual_cache[key]
 
     # ── Draw ──────────────────────────────────────────────────────────────────
 

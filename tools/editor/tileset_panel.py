@@ -128,6 +128,13 @@ class TilesetPanel:
         label = self._font.render(name, True, (200, 200, 200))
         surface.blit(label, (hx + MARGIN_X, hy + 8))
 
+        # Hover coordinates
+        if self._hovered_tile is not None and self._current_id:
+            sc, sr = self._hovered_tile
+            coord = self._font_sm.render(
+                f"{self._current_id}:{sc}:{sr}", True, (160, 200, 160))
+            surface.blit(coord, (hx + MARGIN_X, hy + 24))
+
         if len(self._tile_order) > 1:
             bw, bh = 22, 18
             by = hy + 30

@@ -12,12 +12,10 @@ class Game:
     def __init__(self, screen):
         self.screen = screen
         self.state_stack = []
+        self.player = None   # set after character creation / save load
 
-        # Phase 2: load the full 18-hole course and start at hole 1
-        from src.data.courses_data import make_greenfields_course
-        from src.states.golf_round import GolfRoundState
-        course = make_greenfields_course()
-        self.state_stack.append(GolfRoundState(self, course, hole_index=0, scores=[]))
+        from src.states.main_menu import MainMenuState
+        self.state_stack.append(MainMenuState(self))
 
     # ── State management ──────────────────────────────────────────────────────
 

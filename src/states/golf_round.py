@@ -60,14 +60,15 @@ class GolfRoundState:
         self.renderer = CourseRenderer(self.hole)
         self.tile_sz  = self.renderer.tile_size
 
-        # ── Camera ────────────────────────────────────────────────────────────
-        self.cam_x = 0.0
-        self.cam_y = 0.0
-
         # ── Golf objects ──────────────────────────────────────────────────────
         tee_wx, tee_wy = self.renderer.get_tee_world_pos()
         self.ball     = Ball(tee_wx, tee_wy)
-        self.clubs    = list(STARTER_BAG)
+
+        # ── Camera — centred on the tee at startup ────────────────────────────
+        self.cam_x = tee_wx - VIEWPORT_W / 2
+        self.cam_y = tee_wy - VIEWPORT_H / 2
+        self._clamp_camera()
+        self.clubs    = list(game.player.clubs) if game.player else list(STARTER_BAG)
         self.club_idx = 0
         self.strokes  = 0
 
@@ -78,6 +79,11 @@ class GolfRoundState:
 
         self.font_big = pygame.font.SysFont("arial", 40, bold=True)
         self.font_med = pygame.font.SysFont("arial", 22)
+
+        # ── Wind — randomised once per hole ──────────────────────────────────
+        self.wind_angle    = random.uniform(0, 2 * math.pi)
+        self.wind_strength = random.choices(
+            [0, 1, 2, 3, 4, 5], weights=[10, 25, 30, 20, 10, 5])[0]
 
         # ── State flags ───────────────────────────────────────────────────────
         self.hole_complete  = False
@@ -168,17 +174,30 @@ class GolfRoundState:
         if result is None:
             return
 
-        target_x, target_y = result
         world_w, world_h = self.renderer.world_size()
-        target_x = clamp(target_x, 0, world_w - 1)
-        target_y = clamp(target_y, 0, world_h - 1)
+        is_putt = (self.current_club.name == "Putter")
+
+        # Wind drift — suppressed for putts
+        if is_putt or self.wind_strength == 0:
+            wind_x = wind_y = 0.0
+        else:
+            wind_scale = self.tile_sz * 0.4
+            wind_x = math.cos(self.wind_angle) * self.wind_strength * wind_scale
+            wind_y = math.sin(self.wind_angle) * self.wind_strength * wind_scale
+
+        aim_x = clamp(result.aim_x, 0, world_w - 1)
+        aim_y = clamp(result.aim_y, 0, world_h - 1)
+        target_x = clamp(aim_x + result.shape_x + wind_x, 0, world_w - 1)
+        target_y = clamp(aim_y + result.shape_y + wind_y, 0, world_h - 1)
 
         self._last_safe_x = self.ball.x
         self._last_safe_y = self.ball.y
 
         self.strokes += 1
-        is_putt = (self.current_club.name == "Putter")
-        self.ball.hit(target_x, target_y, is_putt=is_putt)
+        self.ball.hit(target_x, target_y, is_putt=is_putt,
+                      aim_x=aim_x, aim_y=aim_y,
+                      shape_x=result.shape_x, shape_y=result.shape_y,
+                      wind_x=wind_x, wind_y=wind_y)
 
     def _cycle_club(self, direction):
         self.club_idx = (self.club_idx + direction) % len(self.clubs)
@@ -258,8 +277,6 @@ class GolfRoundState:
             self.shot_ctrl.on_ball_landed()
             self._do_tree_bounce()
 
-        self._show_message("Ball blocked by the trees!", 2.5)
-
     def _do_tree_bounce(self):
         """Launch the ball back from the trees toward safe ground."""
         dx = self._last_safe_x - self.ball.x
@@ -283,7 +300,6 @@ class GolfRoundState:
         # Trees: mid-flight check should catch this first, but handle as fallback
         if terrain == Terrain.TREES:
             self._do_tree_bounce()
-            self._show_message("Ball blocked by the trees!", 2.5)
             return
 
         # ── Water hazard ──────────────────────────────────────────────────────
@@ -385,7 +401,8 @@ class GolfRoundState:
         terrain_name = TERRAIN_PROPS[self._ball_terrain()]['name']
         self.hud.draw(surface, self.hole, self.strokes,
                       self.current_club, self.shot_ctrl, terrain_name,
-                      renderer=self.renderer, ball_world_pos=self.ball.pos)
+                      renderer=self.renderer, ball_world_pos=self.ball.pos,
+                      wind_angle=self.wind_angle, wind_strength=self.wind_strength)
 
         if self.message and self.message_timer > 0:
             self._draw_message(surface)

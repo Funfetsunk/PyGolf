@@ -68,13 +68,13 @@ class HUD:
             ShotShape.FADE:     pygame.Rect(px + 10 + (btn_w + gap)*2, btn_y, btn_w, btn_h),
         }
 
-        # Mini-map area
-        self.minimap_rect = pygame.Rect(px + 10, 460, PANEL_WIDTH - 20, 190)
+        # Mini-map area (shifted down to make room for wind section)
+        self.minimap_rect = pygame.Rect(px + 10, 508, PANEL_WIDTH - 20, 160)
 
     # ── Draw ──────────────────────────────────────────────────────────────────
 
     def draw(self, surface, hole, strokes, club, shot_ctrl, terrain_name,
-             renderer=None, ball_world_pos=None):
+             renderer=None, ball_world_pos=None, wind_angle=0.0, wind_strength=0):
         """
         Draw the complete HUD panel.
 
@@ -182,8 +182,15 @@ class HUD:
 
         self._divider(surface, 434)
 
-        # ── Mini-map ──────────────────────────────────────────────────────────
+        # ── Wind ──────────────────────────────────────────────────────────────
         y = 440
+        self._text(surface, "Wind", self.font_small, C_LIGHT_GRAY, x, y)
+        self._draw_wind(surface, x, y + 16, wind_angle, wind_strength)
+
+        self._divider(surface, 488)
+
+        # ── Mini-map ──────────────────────────────────────────────────────────
+        y = 494
         self._text(surface, "Course Map", self.font_small, C_LIGHT_GRAY, x, y)
 
         if renderer is not None and ball_world_pos is not None:
@@ -224,6 +231,42 @@ class HUD:
         pygame.draw.line(surface, C_DIVIDER,
                          (self.panel_x + 10, y),
                          (self.panel_x + PANEL_WIDTH - 10, y))
+
+    def _draw_wind(self, surface, x, y, angle, strength):
+        """Draw a compact wind indicator: compass arrow + cardinal + strength dots."""
+        if strength == 0:
+            s = self.font_medium.render("Calm", True, C_LIGHT_GRAY)
+            surface.blit(s, (x, y))
+            return
+
+        # Compass circle + arrow
+        cx, cy = x + 14, y + 12
+        pygame.draw.circle(surface, C_DARK_GRAY, (cx, cy), 12)
+        pygame.draw.circle(surface, C_DIVIDER,   (cx, cy), 12, 1)
+        ndx, ndy = math.cos(angle), math.sin(angle)
+        ex, ey = int(cx + ndx * 9), int(cy + ndy * 9)
+        pygame.draw.line(surface, C_OFF_WHITE, (cx, cy), (ex, ey), 2)
+        # Arrowhead
+        lx = int(ex - ndx * 5 + ndy * 3)
+        ly = int(ey - ndy * 5 - ndx * 3)
+        rx = int(ex - ndx * 5 - ndy * 3)
+        ry = int(ey - ndy * 5 + ndx * 3)
+        pygame.draw.polygon(surface, C_OFF_WHITE, [(ex, ey), (lx, ly), (rx, ry)])
+
+        # Cardinal direction — arrow and label both show drift direction.
+        # pygame: angle=0→East, angle=π/2→South (y-down), so compass = 90+degrees(angle)
+        dirs = ["N", "NE", "E", "SE", "S", "SW", "W", "NW"]
+        bearing = (90 + math.degrees(angle)) % 360
+        cardinal = dirs[int((bearing + 22.5) / 45) % 8]
+        self._text(surface, cardinal, self.font_medium, C_OFF_WHITE, x + 34, y + 4)
+
+        # Strength dots (5 max)
+        dot_color = C_GREEN if strength <= 2 else C_GOLD if strength <= 3 else C_RED
+        dot_x0, dot_y = x + 76, y + 12
+        for i in range(5):
+            c = dot_color if i < strength else C_DARK_GRAY
+            pygame.draw.circle(surface, c,        (dot_x0 + i * 11, dot_y), 4)
+            pygame.draw.circle(surface, C_DIVIDER, (dot_x0 + i * 11, dot_y), 4, 1)
 
     def _draw_button(self, surface, rect, label, bg, text_color):
         pygame.draw.rect(surface, bg,        rect, border_radius=4)

@@ -214,13 +214,31 @@ def load_course(path: str):
     return data, data.get("tilesets", [])
 
 
-def validate_course(course_data: dict) -> list[tuple[str, str]]:
+def validate_course(course_data: dict,
+                    tileset_registry: dict | None = None) -> list[tuple[str, str]]:
     """
     Validate course_data.  Returns a list of (level, message) tuples where
     level is 'error' or 'warning'.  Errors block saving; warnings do not.
     """
     issues: list[tuple[str, str]] = []
     holes = course_data.get("holes", [])
+
+    # Tileset check — flag any visual tiles referencing an unloaded sheet
+    if tileset_registry is not None:
+        missing: set[str] = set()
+        for hole in holes:
+            for row in hole.get("visual", []):
+                for cell in row:
+                    if cell is not None and isinstance(cell, (tuple, list)):
+                        tid = cell[0]
+                        if tid not in tileset_registry:
+                            missing.add(tid)
+                    elif isinstance(cell, str):
+                        tid = cell.split(":")[0]
+                        if tid not in tileset_registry:
+                            missing.add(tid)
+        for tid in sorted(missing):
+            issues.append(("error", f"Tileset '{tid}' is used but not loaded."))
 
     if not holes:
         issues.append(("error", "Course has no holes."))
