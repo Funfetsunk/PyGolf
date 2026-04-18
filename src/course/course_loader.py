@@ -17,8 +17,7 @@ import pygame
 from src.course.course import Course
 from src.course.hole   import Hole
 
-# Must match tools/editor/canvas.py SOURCE_TILE
-_SOURCE_TILE = 16
+from src.constants import SOURCE_TILE as _SOURCE_TILE   # noqa: F401
 
 
 class CourseValidationError(ValueError):

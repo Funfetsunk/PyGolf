@@ -29,13 +29,11 @@ import os
 import random
 import pygame
 
-from src.golf.terrain import Terrain, TERRAIN_PROPS
+from src.constants    import SOURCE_TILE as _SOURCE_TILE
+from src.golf.terrain  import Terrain, TERRAIN_PROPS
 from src.utils.tileset import TilesetManager
 
 TILE_SIZE = 16
-
-# Must match tools/editor/canvas.py SOURCE_TILE so visual-layer extraction aligns
-_SOURCE_TILE = 16
 
 _ASSETS_DIR = os.path.join(
     os.path.dirname(__file__),
