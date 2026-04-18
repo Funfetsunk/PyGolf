@@ -312,7 +312,10 @@ class CareerHubState:
                 return
             course = random.choice(courses)
             opps   = get_opponent_pool(5)   # tougher World Tour field
-            qs_seed = hash((p.name, p.season, "qschool")) & 0xFFFFFFFF
+            # Seed differs per attempt so the second Q-School isn't a replay
+            # of the first — but still reproducible from the save file.
+            attempt_idx = max(0, 2 - p.qschool_attempts_remaining)
+            qs_seed = hash((p.name, p.season, "qschool", attempt_idx)) & 0xFFFFFFFF
             t = Tournament(
                 "Q-School Qualifier", 4,
                 [course.get_hole(i).par for i in range(course.total_holes)],
@@ -321,6 +324,8 @@ class CareerHubState:
                 rng_seed=qs_seed,
                 course_name=course.name)
             p.qschool_pending = False
+            if p.qschool_attempts_remaining > 0:
+                p.qschool_attempts_remaining -= 1
             self.game.current_tournament = t
             self.game.change_state(GolfRoundState(self.game, course, 0, []))
             return

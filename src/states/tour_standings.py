@@ -129,10 +129,16 @@ class TourStandingsState:
                                  f"Promoted to the World Tour!",
                 }
             field = len(t.opponents) + 1 if t else 31
+            remaining = max(0, self.player.qschool_attempts_remaining)
+            if remaining > 0:
+                tail = (f" {remaining} attempt{'s' if remaining != 1 else ''} "
+                        f"remaining this season.")
+            else:
+                tail = " No attempts remaining — play another Tour 4 season to re-qualify."
             return {
                 "promoted": False,
                 "message":  f"Q-School missed — finished {self._ordinal(pos)} "
-                            f"of {field}. Top 15 needed.",
+                            f"of {field}. Top 15 needed.{tail}",
             }
 
         # ── Normal season end ─────────────────────────────────────────────────
@@ -225,10 +231,19 @@ class TourStandingsState:
         info = self._promotion_info or {}
 
         if info.get("promoted"):
-            p.tour_level      = info["new_level"]
-            p.qschool_pending = False
+            p.tour_level                   = info["new_level"]
+            p.qschool_pending              = False
+            p.qschool_attempts_remaining   = 0
         elif info.get("qschool_qualified"):
-            p.qschool_pending = True
+            # First-time qualification from a Tour 4 season finish.
+            p.qschool_pending              = True
+            p.qschool_attempts_remaining   = 2
+        elif self._is_qschool and not info.get("promoted"):
+            # Failed Q-School. If an attempt remains, let the player try again
+            # without replaying the whole season; otherwise they must re-earn
+            # qualification via another top-5 Tour 4 season.
+            if p.qschool_attempts_remaining > 0:
+                p.qschool_pending = True
 
         p.reset_season()
         self.game.current_tournament = None

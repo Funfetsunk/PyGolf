@@ -79,8 +79,11 @@ class Player:
         self.world_rank:           int        = 201   # starts unranked
         self.majors_won:           list[str]  = []
 
-        # Q-School qualifying flag (set when Tour 4 season ends top-5)
-        self.qschool_pending: bool = False
+        # Q-School qualifying flag (set when Tour 4 season ends top-5) and
+        # the number of Q-School attempts remaining before the player must
+        # re-qualify with another top-5 season finish.
+        self.qschool_pending: bool           = False
+        self.qschool_attempts_remaining: int = 0
 
         # One-time tutorial shown on the player's first round.
         self.tutorial_seen: bool = False
@@ -371,8 +374,9 @@ class Player:
             "world_ranking_points": self.world_ranking_points,
             "world_rank":           self.world_rank,
             "majors_won":           list(self.majors_won),
-            "qschool_pending":      self.qschool_pending,
-            "tutorial_seen":        self.tutorial_seen,
+            "qschool_pending":              self.qschool_pending,
+            "qschool_attempts_remaining":   self.qschool_attempts_remaining,
+            "tutorial_seen":                self.tutorial_seen,
         }
 
     @classmethod
@@ -402,6 +406,7 @@ class Player:
         p.world_ranking_points  = data.get("world_ranking_points", 0.0)
         p.world_rank            = data.get("world_rank", 201)
         p.majors_won            = data.get("majors_won", [])
-        p.qschool_pending       = data.get("qschool_pending", False)
-        p.tutorial_seen         = data.get("tutorial_seen", False)
+        p.qschool_pending              = data.get("qschool_pending", False)
+        p.qschool_attempts_remaining   = data.get("qschool_attempts_remaining", 0)
+        p.tutorial_seen                = data.get("tutorial_seen", False)
         return p
