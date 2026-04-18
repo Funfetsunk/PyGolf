@@ -78,29 +78,12 @@ class RoundSummaryState:
 
         self.scorecard = Scorecard(course)
 
-        # ── Tournament bookkeeping ─────────────────────────────────────────────
-        self._tournament  = game.current_tournament
-        self._tourn_result = None
-
-        if self._tournament is not None:
-            # Pass the full list of hole scores (not just the total)
-            self._tournament.record_player_round(scores)
-            if self._tournament.is_complete():
-                if game.player is not None:
-                    self._tourn_result = game.player.apply_tournament_result(
-                        self._tournament)
-
-        # ── Log round + auto-save ──────────────────────────────────────────────
-        if game.player is not None:
-            game.player.log_round(course.name, sum(scores), course.par)
-            try:
-                from src.utils.save_system import save_game
-                save_game(game.player,
-                          self._tournament if not (self._tournament and
-                                                   self._tournament.is_complete())
-                          else None)
-            except Exception as e:
-                print(f"Auto-save failed: {e}")
+        # ── Tournament bookkeeping + autosave ──────────────────────────────────
+        # Delegated to CareerService so this screen doesn't directly mutate
+        # the player or touch the save system.
+        self._tournament = game.current_tournament
+        from src.career.service import CareerService
+        self._tourn_result = CareerService(game).record_round(course, scores)
 
         # ── Fonts ─────────────────────────────────────────────────────────────
         self.font_title  = pygame.font.SysFont("arial", 42, bold=True)
