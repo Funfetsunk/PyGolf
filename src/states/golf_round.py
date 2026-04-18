@@ -544,18 +544,27 @@ class GolfRoundState:
 
     def _auto_select_club(self):
         terrain = self._ball_terrain()
+        prev_idx = getattr(self, "club_idx", None)
 
-        if terrain == Terrain.GREEN:
+        def _pick(name: str) -> bool:
             for i, c in enumerate(self.clubs):
-                if c.name == "Putter":
+                if c.name == name:
+                    # Give a quick toast the first time we auto-switch so the
+                    # player notices the club in the HUD changed. Skip it if
+                    # another toast (e.g. "In the bunker") is already on
+                    # screen — too many stacked messages is more confusing
+                    # than helpful.
+                    if prev_idx != i and self.message_timer <= 0.4:
+                        self._show_message(f"{name} auto-selected", 1.2)
                     self.club_idx = i
-                    return
+                    return True
+            return False
 
-        if terrain == Terrain.BUNKER:
-            for i, c in enumerate(self.clubs):
-                if c.name == "Sand Wedge":
-                    self.club_idx = i
-                    return
+        if terrain == Terrain.GREEN and _pick("Putter"):
+            return
+
+        if terrain == Terrain.BUNKER and _pick("Sand Wedge"):
+            return
 
         pin_wx, pin_wy = self._pin_world_pos()
         dist_px = math.sqrt((self.ball.x - pin_wx) ** 2 +
