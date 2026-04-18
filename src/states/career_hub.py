@@ -86,6 +86,10 @@ class CareerHubState:
         self._build_tab1_rects()
         self._build_tab2_rects()
 
+        # Losing-streak nudge: if the last three rounds were all well over par,
+        # point the player at their weakest stat. Shown once per hub entry.
+        self._maybe_flash_losing_streak()
+
     # ── Layout builders ───────────────────────────────────────────────────────
 
     def _build_tab_rects(self):
@@ -378,6 +382,30 @@ class CareerHubState:
     def _flash(self, msg: str):
         self._msg       = msg
         self._msg_timer = 3.5
+
+    def _maybe_flash_losing_streak(self) -> None:
+        """Flash a helpful nudge if the player's last three rounds were all
+        significantly over par. Picks out their weakest non-maxed stat."""
+        p = self.player
+        if p is None:
+            return
+        log = p.career_log or []
+        if len(log) < 3:
+            return
+        recent = log[-3:]
+        # "Struggling" = every recent round at least +3 over par.
+        if not all(r.get("diff", 0) >= 3 for r in recent):
+            return
+
+        # Weakest non-maxed stat.
+        pool = [(p.stats.get(k, 50), k) for k in STAT_KEYS
+                if p.stats.get(k, 50) < MAX_STAT]
+        if not pool:
+            return
+        pool.sort()
+        _, weakest = pool[0]
+        label = STAT_LABELS.get(weakest, weakest.title())
+        self._flash(f"Struggling? Training {label} would help most right now.")
 
     def _pop_new_achievements(self):
         """Collect any newly-unlocked achievements for banner display."""
