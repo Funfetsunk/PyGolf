@@ -80,9 +80,23 @@ class MainMenuState:
 
         cx = SCREEN_W // 2
         bw, bh = 300, 56
-        self._btn_new  = pygame.Rect(cx - bw // 2, 340, bw, bh)
-        self._btn_load = pygame.Rect(cx - bw // 2, 414, bw, bh)
-        self._btn_quit = pygame.Rect(cx - bw // 2, 488, bw, bh)
+        self._btn_new    = pygame.Rect(cx - bw // 2, 320, bw, bh)
+        self._btn_load   = pygame.Rect(cx - bw // 2, 388, bw, bh)
+        self._btn_try    = pygame.Rect(cx - bw // 2, 456, bw, bh)
+        self._btn_quit   = pygame.Rect(cx - bw // 2, 524, bw, bh)
+
+        # Course-picker overlay state
+        self._show_picker      = False
+        self._picker_hover_idx = None
+        self._picker_rects: list[tuple[str, str, pygame.Rect]] = []  # (tour_id, course_name, rect)
+        self._picker_scroll    = 0
+        pp_w, pp_h = 720, 540
+        self._picker_panel = pygame.Rect(
+            cx - pp_w // 2, (SCREEN_H - pp_h) // 2, pp_w, pp_h)
+        self._picker_cancel = pygame.Rect(
+            self._picker_panel.centerx - 100,
+            self._picker_panel.bottom - 52,
+            200, 38)
 
         # Save panel
         sp_w, sp_h = 580, 400
@@ -120,14 +134,18 @@ class MainMenuState:
         if self._show_saves:
             self._handle_save_panel_event(event)
             return
+        if self._show_picker:
+            self._handle_picker_event(event)
+            return
 
         if event.type == pygame.MOUSEMOTION:
             p = event.pos
             self._hovered_btn = None
             self._hovered_settings = self._btn_settings.collidepoint(p)
-            for name, rect in [("new", self._btn_new),
-                                ("load", self._btn_load),
-                                ("quit", self._btn_quit)]:
+            for name, rect in [("new",  self._btn_new),
+                               ("load", self._btn_load),
+                               ("try",  self._btn_try),
+                               ("quit", self._btn_quit)]:
                 if rect.collidepoint(p):
                     self._hovered_btn = name
 
@@ -140,6 +158,8 @@ class MainMenuState:
                 self._go_new_game()
             elif self._btn_load.collidepoint(p) and self._saves:
                 self._show_saves = True
+            elif self._btn_try.collidepoint(p):
+                self._open_course_picker()
             elif self._btn_quit.collidepoint(p):
                 pygame.quit()
                 sys.exit()
@@ -147,6 +167,8 @@ class MainMenuState:
         elif event.type == pygame.KEYDOWN:
             if event.key == pygame.K_n:
                 self._go_new_game()
+            elif event.key == pygame.K_t:
+                self._open_course_picker()
             elif event.key == pygame.K_ESCAPE:
                 pygame.quit()
                 sys.exit()
@@ -299,6 +321,88 @@ class MainMenuState:
         from src.states.career_hub import CareerHubState
         self.game.change_state(CareerHubState(self.game))
 
+    # ── Course picker ─────────────────────────────────────────────────────────
+
+    def _open_course_picker(self):
+        """Open the modal picker showing every course across every tour."""
+        from src.data.tours_data import list_tour_ids, get_courses_for_tour, TOUR_DISPLAY_NAMES
+        entries = []
+        for tour_id in list_tour_ids():
+            tour_name = TOUR_DISPLAY_NAMES.get(tour_id, tour_id.title())
+            for course in get_courses_for_tour(tour_id):
+                entries.append({
+                    "tour_id":    tour_id,
+                    "tour_name":  tour_name,
+                    "course":     course,
+                })
+        self._picker_entries = entries
+        self._picker_scroll  = 0
+        self._picker_hover_idx = None
+        self._show_picker    = True
+
+    def _handle_picker_event(self, event):
+        if event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
+            self._show_picker = False
+            return
+
+        if event.type == pygame.MOUSEWHEEL:
+            # Scroll the list up/down
+            max_scroll = max(0, len(getattr(self, "_picker_entries", [])) - 10)
+            self._picker_scroll = max(0, min(
+                max_scroll, self._picker_scroll - event.y))
+            return
+
+        if event.type == pygame.MOUSEMOTION:
+            p = event.pos
+            self._picker_hover_idx = None
+            for idx, (_, _, rect) in enumerate(self._picker_rects):
+                if rect.collidepoint(p):
+                    self._picker_hover_idx = idx
+            return
+
+        if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+            p = event.pos
+            if self._picker_cancel.collidepoint(p):
+                self._show_picker = False
+                return
+            for tour_id, course_name, rect in self._picker_rects:
+                if rect.collidepoint(p):
+                    self._launch_practice_round(tour_id, course_name)
+                    return
+            if not self._picker_panel.collidepoint(p):
+                self._show_picker = False
+
+    def _launch_practice_round(self, tour_id: str, course_name: str):
+        """Spin up a throwaway player and drop straight into GolfRoundState."""
+        from src.data.tours_data import get_courses_for_tour
+        from src.career.player import Player
+        from src.states.golf_round import GolfRoundState
+
+        course = next((c for c in get_courses_for_tour(tour_id)
+                       if c.name == course_name), None)
+        if course is None:
+            self._load_error       = f"Course '{course_name}' could not be loaded."
+            self._load_error_timer = 4.0
+            self._show_picker      = False
+            return
+
+        # Throwaway player with practice_mode so the autosave is skipped.
+        p = Player(f"Practice — {course_name}", "Practice")
+        p.practice_mode   = True
+        p.tutorial_seen   = True   # don't show the tutorial on practice rounds
+        # Set tour level to match the course's tour so AI opponents / ambience
+        # match what real players would experience there.
+        from src.career.tour import get_tour_level
+        try:
+            p.tour_level = get_tour_level(tour_id)
+        except Exception:
+            pass
+
+        self.game.player = p
+        self.game.current_tournament = None
+        self._show_picker = False
+        self.game.change_state(GolfRoundState(self.game, course, 0, []))
+
     # ── Update ────────────────────────────────────────────────────────────────
 
     def update(self, dt):
@@ -323,6 +427,7 @@ class MainMenuState:
         for name, rect, label in [
             ("new",  self._btn_new,  "New Game"),
             ("load", self._btn_load, "Load Game"),
+            ("try",  self._btn_try,  "Try a Course"),
             ("quit", self._btn_quit, "Quit"),
         ]:
             disabled = (name == "load" and load_disabled)
@@ -361,6 +466,9 @@ class MainMenuState:
             self._draw_save_panel(surface)
             if self._confirm_idx is not None:
                 self._draw_confirm_overlay(surface)
+
+        if self._show_picker:
+            self._draw_course_picker(surface)
 
         self._audio_panel.draw(surface)
 
@@ -500,3 +608,70 @@ class MainMenuState:
         pygame.draw.rect(surface, C_BORDER, self._confirm_no, 2, border_radius=7)
         nl = self.font_medium.render("Cancel  (Esc)", True, C_WHITE)
         surface.blit(nl, nl.get_rect(center=self._confirm_no.center))
+
+    # ── Course picker overlay ────────────────────────────────────────────────
+
+    def _draw_course_picker(self, surface):
+        dim = pygame.Surface((SCREEN_W, SCREEN_H), pygame.SRCALPHA)
+        dim.fill((0, 0, 0, 170))
+        surface.blit(dim, (0, 0))
+
+        r = self._picker_panel
+        pygame.draw.rect(surface, C_PANEL,  r, border_radius=10)
+        pygame.draw.rect(surface, C_BORDER, r, 2, border_radius=10)
+
+        title = self.font_btn.render("Try a Course (Practice)", True, C_WHITE)
+        surface.blit(title, (r.centerx - title.get_width() // 2, r.y + 14))
+        hint = self.font_small.render(
+            "Pick any course to play — progress isn't saved.",
+            True, C_GRAY)
+        surface.blit(hint, (r.centerx - hint.get_width() // 2, r.y + 48))
+        pygame.draw.line(surface, C_BORDER,
+                         (r.x + 16, r.y + 68), (r.right - 16, r.y + 68))
+
+        entries = getattr(self, "_picker_entries", [])
+        self._picker_rects = []
+        row_h = 40
+        rows_visible = 10
+        scroll = self._picker_scroll
+        start_y = r.y + 78
+        visible = entries[scroll: scroll + rows_visible]
+
+        for i, entry in enumerate(visible):
+            idx      = scroll + i
+            row_rect = pygame.Rect(r.x + 14, start_y + i * (row_h + 2),
+                                   r.width - 28, row_h)
+            hov = (self._picker_hover_idx == idx)
+            bg  = (38, 68, 38) if hov else (22, 34, 22)
+            pygame.draw.rect(surface, bg, row_rect, border_radius=5)
+            pygame.draw.rect(surface, C_BORDER, row_rect, 1, border_radius=5)
+
+            course = entry["course"]
+            name_s = self.font_medium.render(course.name, True, C_WHITE)
+            surface.blit(name_s, (row_rect.x + 14, row_rect.y + 4))
+
+            par_total  = sum(h.par for h in course.holes)
+            yard_total = sum(h.yardage for h in course.holes)
+            sub_s = self.font_small.render(
+                f"{entry['tour_name']}   •   Par {par_total}   •   {yard_total:,} yds   •   "
+                f"{len(course.holes)} holes",
+                True, C_GRAY)
+            surface.blit(sub_s, (row_rect.x + 14, row_rect.y + 22))
+
+            self._picker_rects.append((entry["tour_id"], course.name, row_rect))
+
+        # Scroll indicator
+        total = len(entries)
+        if total > rows_visible:
+            sh = self.font_small.render(
+                f"{scroll + 1}–{min(scroll + rows_visible, total)} of {total}   "
+                f"(scroll to see more)",
+                True, (110, 130, 100))
+            surface.blit(sh, (r.centerx - sh.get_width() // 2,
+                              self._picker_cancel.y - 24))
+
+        # Cancel button
+        pygame.draw.rect(surface, (55, 30, 30), self._picker_cancel, border_radius=6)
+        pygame.draw.rect(surface, C_RED,        self._picker_cancel, 1, border_radius=6)
+        cl = self.font_medium.render("Cancel  (Esc)", True, C_WHITE)
+        surface.blit(cl, cl.get_rect(center=self._picker_cancel.center))

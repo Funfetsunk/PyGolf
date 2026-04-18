@@ -91,6 +91,11 @@ class Player:
         # One-time tutorial shown on the player's first round.
         self.tutorial_seen: bool = False
 
+        # Practice-mode flag: when True, CareerService skips autosaving so
+        # a "try this course" round doesn't overwrite real career saves.
+        # Not persisted — only set at runtime by the course-picker flow.
+        self.practice_mode: bool = False
+
     @property
     def clubs(self):
         return get_club_bag(self.club_set_name)

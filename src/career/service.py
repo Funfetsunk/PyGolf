@@ -126,10 +126,14 @@ class CareerService:
     # ── Persistence ────────────────────────────────────────────────────────────
 
     def _autosave(self) -> None:
-        """Save the player and any still-active tournament. Never raises."""
+        """Save the player and any still-active tournament. Never raises.
+
+        Skipped entirely for players in practice_mode — the course picker
+        spawns a throwaway Player and we don't want to clobber real saves.
+        """
         player     = self.player
         tournament = self.game.current_tournament
-        if player is None:
+        if player is None or getattr(player, "practice_mode", False):
             return
         persist_tournament = (
             tournament if not (tournament and tournament.is_complete())
