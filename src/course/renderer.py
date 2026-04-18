@@ -17,6 +17,7 @@ Public interface
   get_pin_world_pos() / get_tee_world_pos() / world_size()
 """
 
+import math
 import os
 import random
 import pygame
@@ -256,7 +257,7 @@ class CourseRenderer:
                                          (tx + ts - 1, ty), (tx + ts - 1, ty + ts - 1))
 
     def _draw_pin(self):
-        """Hole cup, flag stick, and triangular flag."""
+        """Hole cup and flag stick baked into the static surface (flag is animated separately)."""
         col, row = self.hole.pin_pos
         cx = col * self.tile_size + self.tile_size // 2
         cy = row * self.tile_size + self.tile_size // 2
@@ -265,16 +266,6 @@ class CourseRenderer:
         pygame.draw.circle(self._course_surface, (0,   0,   0),   (cx, cy), 6)
         pygame.draw.line(self._course_surface, (220, 220, 220),
                          (cx, cy - 2), (cx, cy - 22), 2)
-        pygame.draw.polygon(self._course_surface, (210, 35, 35), [
-            (cx,      cy - 22),
-            (cx + 13, cy - 17),
-            (cx,      cy - 11),
-        ])
-        pygame.draw.polygon(self._course_surface, (240, 60, 60), [
-            (cx,      cy - 22),
-            (cx + 11, cy - 17),
-            (cx,      cy - 12),
-        ], 1)
 
     def _draw_tee_marker(self):
         """Small white tee-marker dots either side of the tee position."""
@@ -362,6 +353,30 @@ class CourseRenderer:
         surface.blit(mini, (ox, oy))
         pygame.draw.rect(surface, (90, 120, 90),
                          pygame.Rect(ox - 1, oy - 1, map_w + 2, map_h + 2), 1)
+
+    def draw_animated_elements(self, surface, camera_x: float,
+                               camera_y: float, elapsed: float) -> None:
+        """Draw time-varying elements (animated flag) over the static course."""
+        col, row = self.hole.pin_pos
+        ts = self.tile_size
+        # World-space pin centre
+        wcx = col * ts + ts // 2
+        wcy = row * ts + ts // 2
+        # Screen-space
+        scx = int(wcx - camera_x)
+        scy = int(wcy - camera_y)
+
+        # Animate the flag polygon using a sine wave
+        wave     = math.sin(elapsed * 3.8) * 3.5
+        wave2    = math.sin(elapsed * 3.8 + 1.2) * 2.0
+        stick_top = (scx, scy - 22)
+        flag_pts  = [
+            stick_top,
+            (scx + 13 + int(wave),  scy - 17 + int(wave2)),
+            (scx +  2 + int(wave2), scy - 12),
+        ]
+        pygame.draw.polygon(surface, (210, 35, 35), flag_pts)
+        pygame.draw.polygon(surface, (240, 60, 60), flag_pts, 1)
 
     # ── Helpers ───────────────────────────────────────────────────────────────
 

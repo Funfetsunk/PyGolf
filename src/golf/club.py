@@ -1,24 +1,11 @@
 """
-Club definitions — each club has a maximum distance, accuracy rating,
-and whether it can be shaped (draw/fade).
+Club definitions — starter bag plus five upgrade tiers.
 
-Phase 1 uses a basic starter bag. Future phases will expand this with
-purchasable club sets.
+Each set improves distance and accuracy.  Players buy sets via the Career Hub.
 """
 
 
 class Club:
-    """
-    Represents a single golf club.
-
-    Attributes
-    ----------
-    name              : display name shown in the HUD
-    max_distance_yards: how far the ball travels at 100% power on a clean lie
-    accuracy          : 0.0–1.0; higher means tighter shot dispersion
-    can_shape         : whether draw/fade shaping can be applied
-    """
-
     def __init__(self, name, max_distance_yards, accuracy, can_shape=True):
         self.name = name
         self.max_distance_yards = max_distance_yards
@@ -26,19 +13,92 @@ class Club:
         self.can_shape = can_shape
 
     def __repr__(self):
-        return f"Club({self.name}, {self.max_distance_yards}yds, acc={self.accuracy})"
+        return f"Club({self.name}, {self.max_distance_yards}yds, acc={self.accuracy:.2f})"
 
 
-# ── Starter bag ───────────────────────────────────────────────────────────────
-# Ordered from longest to shortest (as you'd see in a real bag).
-# Index 0 = Driver is selected first.
-STARTER_BAG = [
-    Club("Driver",          250, accuracy=0.68, can_shape=True),
-    Club("3-Wood",          220, accuracy=0.72, can_shape=True),
-    Club("5-Iron",          175, accuracy=0.78, can_shape=True),
-    Club("7-Iron",          155, accuracy=0.82, can_shape=True),
-    Club("9-Iron",          135, accuracy=0.86, can_shape=True),
-    Club("Pitching Wedge",  110, accuracy=0.90, can_shape=False),
-    Club("Sand Wedge",       90, accuracy=0.86, can_shape=False),
-    Club("Putter",           55, accuracy=0.96, can_shape=False),
+# ── Bag definitions ───────────────────────────────────────────────────────────
+# Each entry: (name, dist, base_acc, can_shape)
+_BAGS_RAW = {
+    "starter": [
+        ("Driver",         250, 0.56, True),
+        ("3-Wood",         220, 0.60, True),
+        ("5-Iron",         175, 0.66, True),
+        ("7-Iron",         155, 0.70, True),
+        ("9-Iron",         135, 0.74, True),
+        ("Pitching Wedge", 110, 0.80, False),
+        ("Sand Wedge",      90, 0.74, False),
+        ("Putter",          55, 0.92, False),
+    ],
+    "mid_range": [
+        ("Driver",         265, 0.59, True),
+        ("3-Wood",         235, 0.63, True),
+        ("5-Iron",         185, 0.69, True),
+        ("7-Iron",         165, 0.73, True),
+        ("9-Iron",         145, 0.77, True),
+        ("Pitching Wedge", 120, 0.83, False),
+        ("Sand Wedge",     100, 0.77, False),
+        ("Putter",          55, 0.92, False),
+    ],
+    "pro": [
+        ("Driver",         278, 0.62, True),
+        ("3-Wood",         248, 0.66, True),
+        ("5-Iron",         196, 0.72, True),
+        ("7-Iron",         175, 0.76, True),
+        ("9-Iron",         154, 0.80, True),
+        ("Pitching Wedge", 129, 0.86, False),
+        ("Sand Wedge",     109, 0.80, False),
+        ("Putter",          55, 0.92, False),
+    ],
+    "tournament": [
+        ("Driver",         288, 0.65, True),
+        ("3-Wood",         258, 0.69, True),
+        ("5-Iron",         204, 0.75, True),
+        ("7-Iron",         182, 0.79, True),
+        ("9-Iron",         161, 0.83, True),
+        ("Pitching Wedge", 136, 0.89, False),
+        ("Sand Wedge",     116, 0.83, False),
+        ("Putter",          55, 0.93, False),
+    ],
+    "elite": [
+        ("Driver",         298, 0.68, True),
+        ("3-Wood",         268, 0.72, True),
+        ("5-Iron",         212, 0.78, True),
+        ("7-Iron",         189, 0.82, True),
+        ("9-Iron",         168, 0.86, True),
+        ("Pitching Wedge", 143, 0.91, False),
+        ("Sand Wedge",     123, 0.86, False),
+        ("Putter",          55, 0.94, False),
+    ],
+    "professional": [
+        ("Driver",         308, 0.71, True),
+        ("3-Wood",         278, 0.75, True),
+        ("5-Iron",         220, 0.81, True),
+        ("7-Iron",         196, 0.85, True),
+        ("9-Iron",         175, 0.89, True),
+        ("Pitching Wedge", 150, 0.93, False),
+        ("Sand Wedge",     130, 0.89, False),
+        ("Putter",          55, 0.95, False),
+    ],
+}
+
+STARTER_BAG = [Club(n, d, a, s) for n, d, a, s in _BAGS_RAW["starter"]]
+
+# ── Set metadata ──────────────────────────────────────────────────────────────
+CLUB_SET_ORDER = [
+    "starter", "mid_range", "pro", "tournament", "elite", "professional"
 ]
+
+CLUB_SETS = {
+    "starter":      {"label": "Starter Set",        "cost": 0,        "min_tour": 1},
+    "mid_range":    {"label": "Mid-Range Set",       "cost": 2_000,    "min_tour": 2},
+    "pro":          {"label": "Pro Set",             "cost": 8_000,    "min_tour": 3},
+    "tournament":   {"label": "Tournament Set",      "cost": 25_000,   "min_tour": 4},
+    "elite":        {"label": "Elite Set",           "cost": 80_000,   "min_tour": 5},
+    "professional": {"label": "Professional Set",    "cost": 200_000,  "min_tour": 6},
+}
+
+
+def get_club_bag(set_name: str) -> list:
+    """Return a list of Club objects for the given set name."""
+    raw = _BAGS_RAW.get(set_name, _BAGS_RAW["starter"])
+    return [Club(n, d, a, s) for n, d, a, s in raw]

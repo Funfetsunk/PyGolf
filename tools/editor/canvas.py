@@ -25,6 +25,7 @@ Controls
   Scroll wheel               → zoom
 """
 
+import math
 import pygame
 from collections import deque
 from copy import deepcopy
@@ -99,6 +100,13 @@ class CourseCanvas:
         self._rect_end:   tuple[int, int] | None = None
         self._rect_attr:  bool = False
 
+        # ── Ruler tool ───────────────────────────────────────────────────────
+        self.ruler_mode          = False
+        self._ruler_start: tuple | None = None  # world-pixel coords
+        self._ruler_end:   tuple | None = None
+        self._ruler_dragging     = False
+        self._ruler_font         = None
+
         # ── Interaction state ─────────────────────────────────────────────────
         self.hovered_tile        = None
         self._painting           = False
@@ -134,6 +142,26 @@ class CourseCanvas:
     def clear_set_mode(self) -> None:
         self._set_mode = None
 
+    @property
+    def tee_pin_yards(self) -> int | None:
+        """Straight-line tee→pin distance in yards (1 tile = 10 yds), or None."""
+        if self.tee_pos is None or self.pin_pos is None:
+            return None
+        tc, tr = self.tee_pos
+        pc, pr = self.pin_pos
+        dx = (pc - tc) * BASE_TILE
+        dy = (pr - tr) * BASE_TILE
+        return round(math.sqrt(dx * dx + dy * dy) / BASE_TILE * 10)
+
+    @property
+    def ruler_yards(self) -> float | None:
+        """Current ruler measurement in yards, or None if no ruler drawn."""
+        if self._ruler_start is None or self._ruler_end is None:
+            return None
+        dx = self._ruler_end[0] - self._ruler_start[0]
+        dy = self._ruler_end[1] - self._ruler_start[1]
+        return math.sqrt(dx * dx + dy * dy) / BASE_TILE * 10
+
     def reset(self, rows: int = 36, cols: int = 48):
         self.rows = rows
         self.cols = cols
@@ -151,6 +179,9 @@ class CourseCanvas:
         self._rect_start = None
         self._rect_end   = None
         self._erasing    = False
+        self._ruler_start    = None
+        self._ruler_end      = None
+        self._ruler_dragging = False
         self._center_on_world()
 
     def load_grids(self, visual_grid, attribute_grid=None):
@@ -272,6 +303,13 @@ class CourseCanvas:
                 return True
 
             if event.button == 1:
+                if self.ruler_mode and not self._set_mode and not keys[pygame.K_SPACE]:
+                    wx, wy = self._screen_to_world(event.pos)
+                    self._ruler_start    = (wx, wy)
+                    self._ruler_end      = (wx, wy)
+                    self._ruler_dragging = True
+                    return True
+
                 if self._set_mode:
                     tile = self._screen_to_tile(event.pos)
                     if tile:
@@ -320,6 +358,11 @@ class CourseCanvas:
             else:
                 self.hovered_tile = None
 
+            if self._ruler_dragging:
+                wx, wy = self._screen_to_world(event.pos)
+                self._ruler_end = (wx, wy)
+                return True
+
             if self._panning:
                 dx = event.pos[0] - self._pan_start_mouse[0]
                 dy = event.pos[1] - self._pan_start_mouse[1]
@@ -341,6 +384,7 @@ class CourseCanvas:
 
         if event.type == pygame.MOUSEBUTTONUP:
             if event.button == 1:
+                self._ruler_dragging = False
                 if self._rect_start is not None and self._rect_end is not None:
                     self.push_undo()
                     self._fill_rect(self._rect_start, self._rect_end, self._rect_attr)
@@ -436,6 +480,10 @@ class CourseCanvas:
                 sy = self.rect.y + int((pr * BASE_TILE - self._oy) * z)
                 self._draw_marker(surface, sx, sy, display_px, (210, 40, 40), "P")
 
+        # Ruler overlay
+        if self.ruler_mode and self._ruler_start and self._ruler_end:
+            self._draw_ruler(surface, z)
+
         # Minimap
         self._draw_minimap(surface)
 
@@ -502,6 +550,33 @@ class CourseCanvas:
         h_count = row_max - row_min + 1
         lbl = self._marker_font.render(f"{w_count}×{h_count}", True, color)
         surface.blit(lbl, (sx + 3, sy + 3))
+
+    def _draw_ruler(self, surface: pygame.Surface, z: float):
+        """Draw the ruler line with distance label."""
+        sx1 = self.rect.x + int((self._ruler_start[0] - self._ox) * z)
+        sy1 = self.rect.y + int((self._ruler_start[1] - self._oy) * z)
+        sx2 = self.rect.x + int((self._ruler_end[0]   - self._ox) * z)
+        sy2 = self.rect.y + int((self._ruler_end[1]   - self._oy) * z)
+
+        C_RULER = (255, 220, 0)
+        pygame.draw.line(surface, C_RULER, (sx1, sy1), (sx2, sy2), 2)
+        pygame.draw.circle(surface, C_RULER, (sx1, sy1), 5)
+        pygame.draw.circle(surface, C_RULER, (sx2, sy2), 5)
+
+        yds = self.ruler_yards
+        if yds is not None and yds > 0.5:
+            mx = (sx1 + sx2) // 2
+            my = (sy1 + sy2) // 2
+            if self._ruler_font is None:
+                self._ruler_font = pygame.font.SysFont("monospace", 13, bold=True)
+            label = f"{round(yds)} yds"
+            ts    = self._ruler_font.render(label, True, C_RULER)
+            bg    = pygame.Rect(mx - ts.get_width() // 2 - 4,
+                                my - ts.get_height() // 2 - 2,
+                                ts.get_width() + 8, ts.get_height() + 4)
+            pygame.draw.rect(surface, (20, 20, 20), bg, border_radius=3)
+            pygame.draw.rect(surface, C_RULER, bg, 1, border_radius=3)
+            surface.blit(ts, (bg.x + 4, bg.y + 2))
 
     def _draw_minimap(self, surface: pygame.Surface):
         if self.rows == 0 or self.cols == 0:
@@ -574,6 +649,11 @@ class CourseCanvas:
         return self._tile_cache[key]
 
     # ── Coordinate helpers ────────────────────────────────────────────────────
+
+    def _screen_to_world(self, pos) -> tuple[float, float]:
+        z = self.zoom
+        return ((pos[0] - self.rect.x) / z + self._ox,
+                (pos[1] - self.rect.y) / z + self._oy)
 
     def _screen_to_tile(self, pos) -> tuple[int, int] | None:
         z   = self.zoom

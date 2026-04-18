@@ -63,8 +63,9 @@ def get_courses_for_tour(tour_id: str) -> list[Course]:
     returned as a fallback (amateur tour only).
     """
     courses = _load_json_courses(tour_id)
-    if not courses and tour_id == "amateur":
-        courses = _load_legacy_courses()
+    if not courses:
+        from src.data.courses_library import get_courses_for_tour_id
+        courses = get_courses_for_tour_id(tour_id)
     return courses
 
 

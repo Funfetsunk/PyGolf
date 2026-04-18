@@ -38,19 +38,19 @@ TERRAIN_PROPS = {
     },
     Terrain.ROUGH: {
         'dist_mod': 0.75,
-        'acc_mod':  0.80,
+        'acc_mod':  0.70,
         'color':    (45, 110, 45),
         'name':     'Rough',
     },
     Terrain.DEEP_ROUGH: {
         'dist_mod': 0.55,
-        'acc_mod':  0.60,
+        'acc_mod':  0.50,
         'color':    (28, 80, 28),
         'name':     'Deep Rough',
     },
     Terrain.BUNKER: {
         'dist_mod': 0.60,
-        'acc_mod':  0.70,
+        'acc_mod':  0.78,
         'color':    (210, 195, 140),
         'name':     'Bunker',
     },

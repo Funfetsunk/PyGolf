@@ -37,6 +37,7 @@ Keyboard shortcuts
   +/-             → Zoom in/out
   Tab             → Cycle view mode (V/A/B)
   P               → Preview
+  M               → Toggle ruler (drag to measure yards between two points)
 """
 
 import json as _json
@@ -162,6 +163,7 @@ class EditorApp:
         self._btn_redo    = btn("Redo",       820, 56)
         self._btn_preview = btn("Preview",   884, 80)
         self._btn_recent  = btn("Recent",    972, 76)
+        self._btn_ruler   = btn("Ruler",    1056, 76)
 
     # ── Main loop ─────────────────────────────────────────────────────────────
 
@@ -205,9 +207,14 @@ class EditorApp:
                     continue
 
                 # Canvas
+                prev_set_mode = self._canvas.set_mode
                 consumed = self._canvas.handle_event(event, self._tilesets)
                 if consumed and event.type == pygame.MOUSEBUTTONDOWN:
                     self._dirty = True
+                # Auto-calc yardage when tee or pin is placed
+                if (prev_set_mode in ("tee", "pin")
+                        and self._canvas.set_mode is None):
+                    self._auto_update_yardage()
 
             self._ui.update(dt)
             self._draw()
@@ -226,6 +233,7 @@ class EditorApp:
                          (0, TOOLBAR_H - 1), (SCREEN_W, TOOLBAR_H - 1))
 
         self._tint_view_buttons()
+        self._tint_ruler_button()
 
         self._canvas.draw(self._screen, self._tilesets)
 
@@ -239,6 +247,15 @@ class EditorApp:
         self._draw_status()
         self._ui.draw_ui(self._screen)
         pygame.display.flip()
+
+    def _tint_ruler_button(self):
+        r = self._btn_ruler.rect
+        active = self._canvas.ruler_mode
+        pygame.draw.rect(
+            self._screen,
+            (255, 220, 0) if active else (60, 60, 60),
+            (r.x, r.bottom + 1, r.width, 3),
+        )
 
     def _tint_view_buttons(self):
         mapping = {
@@ -286,8 +303,13 @@ class EditorApp:
         if self._canvas.set_mode:
             set_mode_txt = f"[PLACE {self._canvas.set_mode.upper()}]"
 
+        ruler_txt = ""
+        if self._canvas.ruler_mode:
+            yds = self._canvas.ruler_yards
+            ruler_txt = f"RULER: {round(yds)} yds" if yds and yds > 0.5 else "RULER (drag to measure)"
+
         parts = [p for p in [tile_txt, brush_txt, attr_txt, zoom_txt,
-                              mode_txt, hole_txt, set_mode_txt,
+                              mode_txt, hole_txt, set_mode_txt, ruler_txt,
                               file_name + dirty_sfx] if p]
         status = "  |  ".join(parts)
 
@@ -332,6 +354,8 @@ class EditorApp:
             self._run_preview()
         elif element == self._btn_recent:
             self._run_recent_overlay()
+        elif element == self._btn_ruler:
+            self._toggle_ruler()
 
     # ── Hole-panel action routing ─────────────────────────────────────────────
 
@@ -340,6 +364,14 @@ class EditorApp:
             self._switch_hole(self._current_hole - 1)
         elif action == "next_hole":
             self._switch_hole(self._current_hole + 1)
+        elif action == "calc_yds":
+            yds = self._canvas.tee_pin_yards
+            if yds is not None:
+                self._hole_panel._yds_entry.set_text(str(yds))
+                self._dirty = True
+                self._show_msg(f"Hole length: {yds} yds (tee → pin)")
+            else:
+                self._show_msg("Set both tee and pin first.")
         elif action == "arm_tee":
             self._canvas.enter_set_mode("tee")
         elif action == "arm_pin":
@@ -736,6 +768,9 @@ class EditorApp:
                 idx = modes.index(self._canvas.view_mode)
                 self._canvas.view_mode = modes[(idx + 1) % 3]
                 return True
+            if event.key == pygame.K_m:
+                self._toggle_ruler()
+                return True
         return False
 
     def _cmd_undo(self):
@@ -968,6 +1003,23 @@ class EditorApp:
             self._clock.tick(30)
 
     # ── Helpers ───────────────────────────────────────────────────────────────
+
+    def _toggle_ruler(self):
+        self._canvas.ruler_mode = not self._canvas.ruler_mode
+        if not self._canvas.ruler_mode:
+            self._canvas._ruler_start    = None
+            self._canvas._ruler_end      = None
+            self._canvas._ruler_dragging = False
+        self._show_msg("Ruler ON — drag to measure." if self._canvas.ruler_mode
+                       else "Ruler OFF.")
+
+    def _auto_update_yardage(self):
+        """After tee/pin placement, recalculate and fill in yardage from tee→pin."""
+        yds = self._canvas.tee_pin_yards
+        if yds is not None:
+            self._hole_panel._yds_entry.set_text(str(yds))
+            self._dirty = True
+            self._show_msg(f"Hole length: {yds} yds (tee → pin)")
 
     def _show_msg(self, text: str, duration: float = 3.0):
         self._status_msg = text

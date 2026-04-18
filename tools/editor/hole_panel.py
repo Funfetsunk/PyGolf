@@ -69,37 +69,38 @@ class HolePanel:
 
         self._yds_entry = entry(60, 82, 100)
         self._yds_entry.set_text("0")
+        self._btn_calc_yds = btn("Calc Yds", 6, 108, w - 12, 20)
 
-        self._si_entry = entry(60, 112, 100)
+        self._si_entry = entry(60, 136, 100)
         self._si_entry.set_text("1")
 
         # ── Set Tee / Set Pin ─────────────────────────────────────────────────
-        self._btn_set_tee = btn("Set Tee", 6,   142, 95)
-        self._btn_set_pin = btn("Set Pin", 113, 142, 95)
+        self._btn_set_tee = btn("Set Tee", 6,   166, 95)
+        self._btn_set_pin = btn("Set Pin", 113, 166, 95)
 
         # ── Course metadata ───────────────────────────────────────────────────
         # Name entry (full-width below label)
-        self._name_entry = entry(52, 198, w - 58)
+        self._name_entry = entry(52, 222, w - 58)
         self._name_entry.set_text("Untitled")
 
         # Tour dropdown — recreated in populate_course() when tour changes
         self._tour_dropdown: pygame_gui.elements.UIDropDownMenu | None = None
-        self._tour_dropdown_rect = pygame.Rect(x + 52, y + 228, w - 58, 26)
+        self._tour_dropdown_rect = pygame.Rect(x + 52, y + 252, w - 58, 26)
         self._make_tour_dropdown("development")
 
         # ── Add / Delete hole ─────────────────────────────────────────────────
-        self._btn_add_hole = btn("+ Hole", 6,   362, 95)
-        self._btn_del_hole = btn("- Hole", 113, 362, 95)
+        self._btn_add_hole = btn("+ Hole", 6,   386, 95)
+        self._btn_del_hole = btn("- Hole", 113, 386, 95)
 
         # ── Copy hole ─────────────────────────────────────────────────────────
-        self._btn_copy_hole = btn("Copy Hole →", 6, 394, w - 12)
+        self._btn_copy_hole = btn("Copy Hole →", 6, 418, w - 12)
 
         # ── Grid size ─────────────────────────────────────────────────────────
-        self._cols_entry = entry(52, 448, 60)
+        self._cols_entry = entry(52, 472, 60)
         self._cols_entry.set_text("48")
-        self._rows_entry = entry(52, 476, 60)
+        self._rows_entry = entry(52, 500, 60)
         self._rows_entry.set_text("36")
-        self._btn_resize = btn("Resize Grid", 6, 504, w - 12)
+        self._btn_resize = btn("Resize Grid", 6, 528, w - 12)
 
         # Pre-build the 18-slot hole-grid rects (constant positions)
         self._hole_btn_rects: list[pygame.Rect] = self._build_hole_rects()
@@ -183,6 +184,8 @@ class HolePanel:
                 return "prev_hole"
             if elem == self._btn_next:
                 return "next_hole"
+            if elem == self._btn_calc_yds:
+                return "calc_yds"
             if elem == self._btn_set_tee:
                 return "arm_tee"
             if elem == self._btn_set_pin:
@@ -223,8 +226,8 @@ class HolePanel:
         ns    = self._font_hdr.render(nav, True, (215, 215, 215))
         surface.blit(ns, (r.x + (r.width - ns.get_width()) // 2, r.y + 26))
 
-        # Par / Yds / SI row labels (vertically centred against 24 px entries)
-        for label, entry_y in [("Par:", 52), ("Yds:", 82), ("SI:", 112)]:
+        # Par / Yds / SI row labels
+        for label, entry_y in [("Par:", 52), ("Yds:", 82), ("SI:", 136)]:
             s  = self._font.render(label, True, C_LABEL)
             ly = r.y + entry_y + (24 - s.get_height()) // 2
             surface.blit(s, (r.x + 6, ly))
@@ -232,45 +235,45 @@ class HolePanel:
         # Arm highlight border around the active set-mode button
         if set_mode == "tee":
             pygame.draw.rect(surface, C_ARM_TEE,
-                             pygame.Rect(r.x + 6, r.y + 142, 95, 24), 2)
+                             pygame.Rect(r.x + 6, r.y + 166, 95, 24), 2)
         elif set_mode == "pin":
             pygame.draw.rect(surface, C_ARM_PIN,
-                             pygame.Rect(r.x + 113, r.y + 142, 95, 24), 2)
+                             pygame.Rect(r.x + 113, r.y + 166, 95, 24), 2)
 
         # Separator
-        sep_y = r.y + 174
+        sep_y = r.y + 198
         pygame.draw.line(surface, C_SEP, (r.x, sep_y), (r.right, sep_y))
 
         # ── COURSE INFO ───────────────────────────────────────────────────────
-        self._section_header(surface, "COURSE INFO", r.y + 176)
+        self._section_header(surface, "COURSE INFO", r.y + 200)
 
         # Name / Tour row labels
-        for label, entry_y in [("Name:", 198), ("Tour:", 228)]:
+        for label, entry_y in [("Name:", 222), ("Tour:", 252)]:
             s  = self._font.render(label, True, C_LABEL)
             ly = r.y + entry_y + (24 - s.get_height()) // 2
             surface.blit(s, (r.x + 6, ly))
 
         # Separator above holes list
-        sep2_y = r.y + 260
+        sep2_y = r.y + 284
         pygame.draw.line(surface, C_SEP, (r.x, sep2_y), (r.right, sep2_y))
 
         # "Holes:" header
         hs = self._font_hdr.render("Holes:", True, C_LABEL)
-        surface.blit(hs, (r.x + 6, r.y + 264))
+        surface.blit(hs, (r.x + 6, r.y + 288))
 
         # Hole grid
         self._draw_hole_grid(surface)
 
         # ── COPY HOLE ─────────────────────────────────────────────────────────
-        sep3_y = r.y + 390
+        sep3_y = r.y + 414
         pygame.draw.line(surface, C_SEP, (r.x, sep3_y), (r.right, sep3_y))
 
         # ── GRID SIZE ─────────────────────────────────────────────────────────
-        sep4_y = r.y + 422
+        sep4_y = r.y + 446
         pygame.draw.line(surface, C_SEP, (r.x, sep4_y), (r.right, sep4_y))
-        self._section_header(surface, "GRID SIZE", r.y + 424)
+        self._section_header(surface, "GRID SIZE", r.y + 448)
 
-        for label, entry_y in [("Cols:", 448), ("Rows:", 476)]:
+        for label, entry_y in [("Cols:", 472), ("Rows:", 500)]:
             s  = self._font.render(label, True, C_LABEL)
             ly = r.y + entry_y + (24 - s.get_height()) // 2
             surface.blit(s, (r.x + 6, ly))
@@ -300,7 +303,7 @@ class HolePanel:
         gx, gy = 3, 4
         cols   = 6
         x0     = self.rect.x + 6
-        y0     = self.rect.y + 282   # just below "Holes:" label
+        y0     = self.rect.y + 306   # just below "Holes:" label
         rects  = []
         for i in range(18):
             col = i % cols

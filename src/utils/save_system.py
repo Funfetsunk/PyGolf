@@ -25,24 +25,26 @@ def save_path_for(player_name: str) -> str:
     return os.path.join(SAVE_DIR, f"{_safe_filename(player_name)}.json")
 
 
-def save_game(player: Player) -> str:
-    """Serialise the player to JSON. Returns the path written."""
+def save_game(player: Player, tournament=None) -> str:
+    """Serialise the player (and optional active tournament) to JSON."""
     os.makedirs(SAVE_DIR, exist_ok=True)
     path = save_path_for(player.name)
     data = {
         "save_format": SAVE_FORMAT,
-        "player": player.to_dict(),
+        "player":      player.to_dict(),
+        "tournament":  tournament.to_dict() if tournament is not None else None,
     }
     with open(path, "w", encoding="utf-8") as f:
         json.dump(data, f, indent=2)
     return path
 
 
-def load_game(path: str) -> Player:
-    """Load a save file and return a Player object."""
+def load_game(path: str):
+    """Load a save file; returns (Player, tournament_dict_or_None)."""
     with open(path, "r", encoding="utf-8") as f:
         data = json.load(f)
-    return Player.from_dict(data["player"])
+    player = Player.from_dict(data["player"])
+    return player, data.get("tournament")
 
 
 def list_saves() -> list[str]:

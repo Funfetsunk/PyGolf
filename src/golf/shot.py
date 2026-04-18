@@ -34,6 +34,12 @@ AIM_CLICK_RADIUS = 35
 # How much lateral curve is applied as a fraction of total shot distance.
 SHAPE_CURVE_FRACTION = 0.10
 
+# Scatter multipliers (fraction of shot distance).
+# Lateral: perpendicular miss — bell-curve via gauss.
+# Distance: over/under-shoot along the shot direction.
+SCATTER_LATERAL   = 0.40
+SCATTER_DISTANCE  = 0.12
+
 
 class ShotShape(Enum):
     DRAW     = "Draw"
@@ -134,18 +140,29 @@ class ShotController:
         elif self.shot_shape == ShotShape.FADE and club.can_shape:
             shape_offset_px =  shot_dist_px * SHAPE_CURVE_FRACTION   # right curve
 
-        # Random scatter based on club accuracy and terrain accuracy penalty
-        effective_accuracy = club.accuracy * acc_mod
-        scatter_range = (1.0 - effective_accuracy) * shot_dist_px * 0.18
-        scatter = random.uniform(-scatter_range, scatter_range)
+        # Effective accuracy — putter degrades with distance; other clubs use terrain mod
+        if club.name == "Putter":
+            shot_dist_yards = shot_dist_px / tile_size * 10.0
+            degradation = (shot_dist_yards / 100.0) * 0.40
+            effective_accuracy = max(0.50, club.accuracy - degradation) * acc_mod
+        else:
+            effective_accuracy = club.accuracy * acc_mod
 
-        # Straight aim point (no shape, no wind)
+        # Lateral scatter (perpendicular) — bell-curve via gauss, clamped to ±range
+        lat_range = (1.0 - effective_accuracy) * shot_dist_px * SCATTER_LATERAL
+        lateral   = clamp(random.gauss(0, lat_range / 2.5), -lat_range, lat_range)
+
+        # Distance scatter (along shot direction) — over/undershoot
+        dist_range   = shot_dist_px * SCATTER_DISTANCE
+        dist_scatter = clamp(random.gauss(0, dist_range / 2.5), -dist_range, dist_range)
+
+        # Straight aim point adjusted for distance scatter
         bx, by = ball_world_pos
-        aim_x = bx + dir_x * shot_dist_px
-        aim_y = by + dir_y * shot_dist_px
+        aim_x = bx + dir_x * (shot_dist_px + dist_scatter)
+        aim_y = by + dir_y * (shot_dist_px + dist_scatter)
 
-        # Shape + scatter as perpendicular offset (applied quadratically by ball.py)
-        total_offset = shape_offset_px + scatter
+        # Shape + lateral scatter as perpendicular offset (applied quadratically by ball.py)
+        total_offset = shape_offset_px + lateral
         shape_x = perp_x * total_offset
         shape_y = perp_y * total_offset
 

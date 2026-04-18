@@ -182,18 +182,16 @@ class CharacterCreationState:
 
     def _start_career(self):
         from src.career.player import Player
-        from src.data.courses_data import make_greenfields_course
-        from src.states.golf_round import GolfRoundState
+        from src.states.career_hub import CareerHubState
 
-        name = self._name.strip()
+        name        = self._name.strip()
         nationality = NATIONALITIES[self._nat_idx]
 
         player = Player(name, nationality)
         player.set_bonus_stats(self._bonuses)
         self.game.player = player
 
-        course = make_greenfields_course()
-        self.game.change_state(GolfRoundState(self.game, course, 0, []))
+        self.game.change_state(CareerHubState(self.game))
 
     def _go_back(self):
         from src.states.main_menu import MainMenuState

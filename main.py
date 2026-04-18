@@ -15,10 +15,15 @@ FPS = 60
 
 def main():
     pygame.init()
+    pygame.mixer.init(frequency=44100, size=-16, channels=2, buffer=512)
     pygame.display.set_caption("Let's Golf!")
 
     screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
-    clock = pygame.time.Clock()
+    clock  = pygame.time.Clock()
+
+    # Pre-build all synthetic sounds (< 0.5 s; happens before the first frame)
+    from src.utils.sound_manager import SoundManager
+    SoundManager.instance().init()
 
     game = Game(screen)
 

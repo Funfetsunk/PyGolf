@@ -14,6 +14,10 @@ Three overlaid effects shape the visible path:
 
 A vertical arc is added so the ball appears to travel through the air.
 A shadow at ground level shows where the ball will land.
+
+After landing the ball enters a ROLLING state: it continues in the shot
+direction, decelerating under friction, before coming to rest.  The roll
+distance is passed in from golf_round.py and is terrain-dependent.
 """
 
 import math
@@ -24,15 +28,18 @@ import pygame
 from src.utils.math_utils import clamp
 
 BASE_FLIGHT_DURATION = 1.1
-HOLE_CAPTURE_RADIUS  = 14
+HOLE_CAPTURE_RADIUS  = 7     # direct landing/roll capture (~2.2 yards)
+HOLE_ROLL_RADIUS     = 12    # mid-flight "rolling over hole" capture (last 25% of flight)
 BALL_RADIUS          = 5
 ARC_HEIGHT           = 35
 SINK_DURATION        = 0.45
+ROLL_DECEL           = 180.0  # px / s²  — ground friction deceleration
 
 
 class BallState(Enum):
     AT_REST = auto()
     FLYING  = auto()
+    ROLLING = auto()
     SINKING = auto()
     IN_HOLE = auto()
 
@@ -49,46 +56,49 @@ class Ball:
         self._start_y  = y
         self._target_x = x
         self._target_y = y
-        # Straight aim point (no shape, no wind) — used as the base flight path
         self._aim_x    = x
         self._aim_y    = y
-        # Shape offset at landing (applied quadratically during flight)
         self._shape_x  = 0.0
         self._shape_y  = 0.0
-        # Wind offset at landing (applied linearly during flight)
         self._wind_x   = 0.0
         self._wind_y   = 0.0
 
         self._flight_timer    = 0.0
         self._flight_duration = BASE_FLIGHT_DURATION
         self._is_putt         = False
+        self._roll_dist_px    = 0.0
+
+        # Rolling state
+        self._roll_dir_x = 0.0
+        self._roll_dir_y = 0.0
+        self._roll_speed = 0.0   # px/s, decreases to zero under ROLL_DECEL
 
         self._sink_timer = 0.0
         self._pin_x      = 0.0
         self._pin_y      = 0.0
+
+        self._spin_angle = 0.0   # for rolling animation
 
     @property
     def pos(self):
         return (self.x, self.y)
 
     def is_moving(self):
-        return self.state == BallState.FLYING
+        return self.state in (BallState.FLYING, BallState.ROLLING)
 
     def hit(self, target_x, target_y, is_putt=False,
             aim_x=None, aim_y=None,
             shape_x=0.0, shape_y=0.0,
-            wind_x=0.0, wind_y=0.0):
+            wind_x=0.0, wind_y=0.0,
+            roll_dist_px=0.0):
         """
         Launch the ball toward (target_x, target_y).
 
-        aim_x/y   : straight aim point with no shaping and no wind — used as
-                    the base interpolation path so the ball starts straight.
-        shape_x/y : shape displacement vector (applied quadratically during
-                    flight — ball starts straight then curves).
-        wind_x/y  : wind displacement vector (applied linearly — steady drift).
-        is_putt   : suppresses the vertical arc so the ball rolls on the ground.
-
-        If aim_x/y are omitted the ball travels in a straight line to target.
+        aim_x/y      : straight aim point (no shaping, no wind).
+        shape_x/y    : perpendicular curve offset (quadratic during flight).
+        wind_x/y     : wind drift (linear during flight).
+        roll_dist_px : how far the ball rolls after landing (0 = stop immediately).
+        is_putt      : suppresses arc and post-landing roll.
         """
         self._start_x = self.x
         self._start_y = self.y
@@ -104,6 +114,7 @@ class Ball:
         self._flight_timer    = 0.0
         self._flight_duration = BASE_FLIGHT_DURATION
         self._is_putt         = is_putt
+        self._roll_dist_px    = 0.0 if is_putt else float(roll_dist_px)
         self.state = BallState.FLYING
 
     def place(self, x, y):
@@ -111,7 +122,13 @@ class Ball:
         self.y = float(y)
         self.state = BallState.AT_REST
 
+    def stop_roll(self):
+        """Immediately kill the roll and come to rest (e.g. ball enters a bunker)."""
+        self._roll_speed = 0.0
+        self.state = BallState.AT_REST
+
     def update(self, dt, pin_world_pos):
+        # ── Sinking ───────────────────────────────────────────────────────────
         if self.state == BallState.SINKING:
             self._sink_timer += dt
             t = clamp(self._sink_timer / SINK_DURATION, 0.0, 1.0)
@@ -121,31 +138,17 @@ class Ball:
                 self.state = BallState.IN_HOLE
             return
 
-        if self.state != BallState.FLYING:
-            return
+        # ── Rolling ───────────────────────────────────────────────────────────
+        if self.state == BallState.ROLLING:
+            self._roll_speed = max(0.0, self._roll_speed - ROLL_DECEL * dt)
+            if self._roll_speed <= 0.0:
+                self.state = BallState.AT_REST
+                self._spin_angle = 0.0
+                return
 
-        self._flight_timer += dt
-        t = clamp(self._flight_timer / self._flight_duration, 0.0, 1.0)
-
-        # Ease-out so the ball decelerates as it lands
-        t_smooth = 1.0 - (1.0 - t) ** 2
-
-        # Base path: straight lerp along the aimed direction
-        base_x = self._start_x + t_smooth * (self._aim_x - self._start_x)
-        base_y = self._start_y + t_smooth * (self._aim_y - self._start_y)
-
-        # Shape curve: quadratic — starts near zero, full offset at landing
-        shape_t = t_smooth ** 2
-        # Wind drift: linear — builds up evenly throughout the flight
-        wind_t  = t_smooth
-
-        self.x = base_x + self._shape_x * shape_t + self._wind_x * wind_t
-        self.y = base_y + self._shape_y * shape_t + self._wind_y * wind_t
-
-        if self._flight_timer >= self._flight_duration:
-            self.x = self._target_x
-            self.y = self._target_y
-            self.state = BallState.AT_REST
+            self.x += self._roll_dir_x * self._roll_speed * dt
+            self.y += self._roll_dir_y * self._roll_speed * dt
+            self._spin_angle += self._roll_speed * dt * 0.12
 
             px, py = pin_world_pos
             if math.sqrt((self.x - px) ** 2 + (self.y - py) ** 2) <= HOLE_CAPTURE_RADIUS:
@@ -153,6 +156,63 @@ class Ball:
                 self._sink_timer = 0.0
                 self._pin_x      = px
                 self._pin_y      = py
+            return
+
+        if self.state != BallState.FLYING:
+            return
+
+        # ── Flying ────────────────────────────────────────────────────────────
+        self._flight_timer += dt
+        t = clamp(self._flight_timer / self._flight_duration, 0.0, 1.0)
+
+        # Ease-out so the ball decelerates as it approaches the target
+        t_smooth = 1.0 - (1.0 - t) ** 2
+
+        base_x = self._start_x + t_smooth * (self._aim_x - self._start_x)
+        base_y = self._start_y + t_smooth * (self._aim_y - self._start_y)
+
+        shape_t = t_smooth ** 2   # quadratic: straight early, curving near end
+        wind_t  = t_smooth        # linear: steady drift throughout
+
+        self.x = base_x + self._shape_x * shape_t + self._wind_x * wind_t
+        self.y = base_y + self._shape_y * shape_t + self._wind_y * wind_t
+
+        px, py = pin_world_pos
+        dist_to_pin = math.sqrt((self.x - px) ** 2 + (self.y - py) ** 2)
+
+        # "Rolling over the hole" — ball is decelerating in the final approach
+        if t > 0.75 and dist_to_pin <= HOLE_ROLL_RADIUS:
+            self.x = px
+            self.y = py
+            self.state       = BallState.SINKING
+            self._sink_timer = 0.0
+            self._pin_x      = px
+            self._pin_y      = py
+            return
+
+        if self._flight_timer >= self._flight_duration:
+            self.x = self._target_x
+            self.y = self._target_y
+
+            # Start rolling if terrain allows, otherwise stop
+            dx = self._target_x - self._start_x
+            dy = self._target_y - self._start_y
+            mag = math.sqrt(dx * dx + dy * dy)
+
+            if self._roll_dist_px > 0.0 and mag > 0.0:
+                self._roll_dir_x = dx / mag
+                self._roll_dir_y = dy / mag
+                # v₀ chosen so the ball decelerates to rest over exactly roll_dist_px
+                self._roll_speed = math.sqrt(2.0 * ROLL_DECEL * self._roll_dist_px)
+                self.state = BallState.ROLLING
+            else:
+                self.state = BallState.AT_REST
+                dist_landed = math.sqrt((self.x - px) ** 2 + (self.y - py) ** 2)
+                if dist_landed <= HOLE_CAPTURE_RADIUS:
+                    self.state       = BallState.SINKING
+                    self._sink_timer = 0.0
+                    self._pin_x      = px
+                    self._pin_y      = py
 
     def draw(self, surface, camera_x, camera_y):
         if self.state == BallState.IN_HOLE:
@@ -169,7 +229,7 @@ class Ball:
 
         arc_offset = self._get_arc_offset()
 
-        # Ground-level shadow
+        # Ground-level shadow (shrinks and fades as ball rises)
         shadow_sx = int(self.x - camera_x)
         shadow_sy = int(self.y - camera_y)
         rise         = abs(arc_offset)
@@ -197,8 +257,15 @@ class Ball:
         pygame.draw.circle(surface, (255, 255, 255), (hl_x, hl_y), max(1, r // 3))
         pygame.draw.circle(surface, (160, 160, 160), (bsx, bsy), r, 1)
 
+        # Spinning dimple when rolling
+        if self.state == BallState.ROLLING:
+            spin_r = max(1, r - 2)
+            dx = int(math.cos(self._spin_angle) * spin_r)
+            dy = int(math.sin(self._spin_angle) * spin_r)
+            pygame.draw.circle(surface, (110, 110, 110), (bsx + dx, bsy + dy), 1)
+
     def _get_arc_offset(self):
-        if self.state != BallState.FLYING or self._is_putt:
+        if self.state not in (BallState.FLYING,) or self._is_putt:
             return 0
         t = clamp(self._flight_timer / self._flight_duration, 0.0, 1.0)
         return -int(ARC_HEIGHT * 4 * t * (1.0 - t))

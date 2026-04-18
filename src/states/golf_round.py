@@ -28,6 +28,19 @@ from src.utils.math_utils import clamp
 # ── Layout constants ──────────────────────────────────────────────────────────
 VIEWPORT_W = 960
 VIEWPORT_H = 720
+
+# Fraction of shot distance that the ball rolls after landing, by terrain.
+# Putts never use this — they already ARE the roll.
+_ROLL_FRAC = {
+    Terrain.TEE:        0.18,
+    Terrain.FAIRWAY:    0.18,
+    Terrain.ROUGH:      0.04,
+    Terrain.DEEP_ROUGH: 0.0,
+    Terrain.BUNKER:     0.0,
+    Terrain.TREES:      0.0,
+    Terrain.GREEN:      0.08,
+    Terrain.WATER:      0.0,
+}
 SCREEN_W   = 1280
 SCREEN_H   = 720
 
@@ -92,6 +105,18 @@ class GolfRoundState:
         self.message       = ""
         self.message_timer = 0.0
 
+        # ── Animation + audio ─────────────────────────────────────────────────
+        self._flag_time       = 0.0
+        self._score_snd_played = False
+
+        # Start ambient sound (birds for lower tours, crowd for higher)
+        from src.utils.sound_manager import SoundManager
+        _snd = SoundManager.instance()
+        if game.player and game.player.tour_level >= 4:
+            _snd.play_ambient("ambient_crowd")
+        else:
+            _snd.play_ambient("ambient_birds")
+
         # Last safe ball position (for water drop / tree bounce)
         self._last_safe_x        = tee_wx
         self._last_safe_y        = tee_wy
@@ -118,6 +143,31 @@ class GolfRoundState:
 
     def _ball_terrain(self):
         return self.hole.get_terrain_at_pixel(self.ball.x, self.ball.y, self.tile_sz)
+
+    def _effective_club(self):
+        """Return a Club copy with stats scaled by player attributes + staff bonuses."""
+        from src.golf.club import Club
+        club   = self.current_club
+        player = self.game.player
+        if player is None:
+            return club
+
+        def eff(key):
+            return player.stats.get(key, 50) + player.staff_stat_bonus(key)
+
+        # Power scales distance: 50 = 1.0x, 80 = 1.15x
+        power_mult = 1.0 + (eff("power") - 50) / 200.0
+
+        if club.name == "Putter":
+            acc_bonus = (eff("putting") - 50) / 500.0
+        elif club.name in ("Pitching Wedge", "Sand Wedge"):
+            acc_bonus = (eff("short_game") - 50) / 500.0
+        else:
+            acc_bonus = (eff("accuracy") - 50) / 500.0
+
+        new_dist = club.max_distance_yards * power_mult
+        new_acc  = min(0.99, club.accuracy + acc_bonus)
+        return Club(club.name, new_dist, new_acc, club.can_shape)
 
     # ── Event handling ────────────────────────────────────────────────────────
 
@@ -169,19 +219,32 @@ class GolfRoundState:
 
         terrain = self._ball_terrain()
         result  = self.shot_ctrl.handle_mouseup(
-            pos, self.ball.pos, self.current_club, terrain, self.tile_sz)
+            pos, self.ball.pos, self._effective_club(), terrain, self.tile_sz)
 
         if result is None:
             return
 
+        from src.utils.sound_manager import SoundManager
+        SoundManager.instance().play("swing")
+
         world_w, world_h = self.renderer.world_size()
         is_putt = (self.current_club.name == "Putter")
 
-        # Wind drift — suppressed for putts
-        if is_putt or self.wind_strength == 0:
+        # Wind drift — putts >15 yards get 20% of full drift; shorter putts unaffected
+        if self.wind_strength == 0:
             wind_x = wind_y = 0.0
+        elif is_putt:
+            putt_yards = (math.sqrt((result.aim_x - self.ball.x) ** 2 +
+                                    (result.aim_y - self.ball.y) ** 2)
+                          / self.tile_sz * 10)
+            if putt_yards > 15:
+                wind_scale = self.tile_sz * 0.55 * 0.20
+                wind_x = math.cos(self.wind_angle) * self.wind_strength * wind_scale
+                wind_y = math.sin(self.wind_angle) * self.wind_strength * wind_scale
+            else:
+                wind_x = wind_y = 0.0
         else:
-            wind_scale = self.tile_sz * 0.4
+            wind_scale = self.tile_sz * 0.55
             wind_x = math.cos(self.wind_angle) * self.wind_strength * wind_scale
             wind_y = math.sin(self.wind_angle) * self.wind_strength * wind_scale
 
@@ -190,6 +253,11 @@ class GolfRoundState:
         target_x = clamp(aim_x + result.shape_x + wind_x, 0, world_w - 1)
         target_y = clamp(aim_y + result.shape_y + wind_y, 0, world_h - 1)
 
+        # Roll distance — fraction of shot distance, scaled by landing terrain
+        shot_dist_px = math.sqrt((aim_x - self.ball.x) ** 2 +
+                                 (aim_y - self.ball.y) ** 2)
+        roll_dist_px = shot_dist_px * _ROLL_FRAC.get(terrain, 0.0)
+
         self._last_safe_x = self.ball.x
         self._last_safe_y = self.ball.y
 
@@ -197,7 +265,8 @@ class GolfRoundState:
         self.ball.hit(target_x, target_y, is_putt=is_putt,
                       aim_x=aim_x, aim_y=aim_y,
                       shape_x=result.shape_x, shape_y=result.shape_y,
-                      wind_x=wind_x, wind_y=wind_y)
+                      wind_x=wind_x, wind_y=wind_y,
+                      roll_dist_px=roll_dist_px)
 
     def _cycle_club(self, direction):
         self.club_idx = (self.club_idx + direction) % len(self.clubs)
@@ -205,6 +274,11 @@ class GolfRoundState:
     # ── Update ────────────────────────────────────────────────────────────────
 
     def update(self, dt):
+        self._flag_time += dt
+
+        from src.utils.sound_manager import SoundManager
+        SoundManager.instance().update(dt)
+
         if self.hole_complete:
             self.complete_timer += dt
             return
@@ -231,8 +305,16 @@ class GolfRoundState:
         if self.ball.state == BallState.IN_HOLE:
             self.hole_complete  = True
             self.complete_timer = 0.0
+            self._play_score_sound()
 
-        if self.ball.state == BallState.FLYING:
+        # Stop the roll immediately if the ball enters heavy terrain
+        if self.ball.state == BallState.ROLLING:
+            roll_terrain = self._ball_terrain()
+            if roll_terrain in (Terrain.BUNKER, Terrain.WATER,
+                                Terrain.TREES, Terrain.DEEP_ROUGH):
+                self.ball.stop_roll()
+
+        if self.ball.state in (BallState.FLYING, BallState.ROLLING):
             self._follow_camera(dt)
 
         if self.message_timer > 0:
@@ -293,9 +375,49 @@ class GolfRoundState:
         else:
             self._auto_select_club()
 
+    def _water_drop_pos(self):
+        """
+        Walk from the ball's water position back toward the last safe position,
+        one small step at a time, and return the first tile that isn't water.
+        Guarantees the drop is never placed in the water.
+        """
+        bx, by = self.ball.x, self.ball.y
+        dx = self._last_safe_x - bx
+        dy = self._last_safe_y - by
+        dist = math.sqrt(dx * dx + dy * dy)
+
+        if dist == 0:
+            return self._last_safe_x, self._last_safe_y
+
+        ndx, ndy = dx / dist, dy / dist
+        step = max(1.0, self.tile_sz * 0.25)
+
+        pos_x, pos_y = bx, by
+        travelled = 0.0
+        while travelled < dist + step:
+            travelled += step
+            tx = bx + ndx * min(travelled, dist)
+            ty = by + ndy * min(travelled, dist)
+            if self.hole.get_terrain_at_pixel(tx, ty, self.tile_sz) != Terrain.WATER:
+                return tx, ty
+
+        return self._last_safe_x, self._last_safe_y
+
     def _on_ball_landed(self):
         self.shot_ctrl.on_ball_landed()
         terrain = self._ball_terrain()
+
+        # Terrain landing sound
+        from src.utils.sound_manager import SoundManager
+        _snd = SoundManager.instance()
+        _terrain_snd = {
+            Terrain.WATER:      "hit_water",
+            Terrain.BUNKER:     "hit_bunker",
+            Terrain.TREES:      "hit_trees",
+            Terrain.ROUGH:      "hit_rough",
+            Terrain.DEEP_ROUGH: "hit_rough",
+        }
+        _snd.play(_terrain_snd.get(terrain, "hit"))
 
         # Trees: mid-flight check should catch this first, but handle as fallback
         if terrain == Terrain.TREES:
@@ -306,11 +428,26 @@ class GolfRoundState:
         if terrain == Terrain.WATER:
             self.strokes += 1
             self._show_message("Water hazard! +1 penalty stroke", 2.8)
-            drop_x = (self.ball.x + self._last_safe_x) / 2
-            drop_y = (self.ball.y + self._last_safe_y) / 2
+            drop_x, drop_y = self._water_drop_pos()
             self.ball.place(drop_x, drop_y)
 
         self._auto_select_club()
+
+    def _play_score_sound(self):
+        if self._score_snd_played:
+            return
+        self._score_snd_played = True
+        from src.utils.sound_manager import SoundManager
+        _snd = SoundManager.instance()
+        diff = self.strokes - self.hole.par
+        if self.strokes == 1:
+            _snd.play("hole_in_one")
+        elif diff <= -2:
+            _snd.play("eagle")
+        elif diff == -1:
+            _snd.play("birdie")
+        else:
+            _snd.play("ball_in_hole")
 
     def _auto_select_club(self):
         terrain = self._ball_terrain()
@@ -368,6 +505,8 @@ class GolfRoundState:
         """Move to the hole-transition screen (or round summary if last hole)."""
         from src.states.hole_transition import HoleTransitionState
         from src.states.round_summary   import RoundSummaryState
+        from src.utils.sound_manager    import SoundManager
+        SoundManager.instance().stop_ambient()
 
         updated_scores = self.scores + [self.strokes]
 
@@ -386,6 +525,8 @@ class GolfRoundState:
 
         surface.fill((20, 80, 20))
         self.renderer.draw(surface, int(self.cam_x), int(self.cam_y), viewport)
+        self.renderer.draw_animated_elements(
+            surface, int(self.cam_x), int(self.cam_y), self._flag_time)
 
         aim = self.shot_ctrl.get_aim_line(self._ball_screen_pos())
         if aim:

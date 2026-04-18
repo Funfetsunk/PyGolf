@@ -1,0 +1,231 @@
+"""
+opponents_data.py — named AI golfer pools for each of the 6 tour levels.
+
+Each pool contains 30 opponents whose skills are distributed evenly across
+the tour's skill range so that some players are consistently stronger.
+"""
+
+from src.career.opponent import Opponent
+
+# Skill range (low, high) for each tour level
+SKILL_RANGES = {
+    1: (0.22, 0.38),   # Amateur
+    2: (0.38, 0.52),   # Challenger
+    3: (0.50, 0.65),   # Development
+    4: (0.62, 0.76),   # Continental
+    5: (0.74, 0.90),   # World
+    6: (0.88, 0.98),   # Grand
+}
+
+# (name, nationality) pools per tour level.
+# 30 entries each — skills are assigned linearly low→high.
+_NAMES = {
+    1: [
+        ("Gary Holt",       "American"),
+        ("Pete Drummond",   "Scottish"),
+        ("Liam Walsh",      "Irish"),
+        ("Tom Briggs",      "English"),
+        ("Dan Cooper",      "American"),
+        ("Mark Finlay",     "Welsh"),
+        ("Sam Norris",      "Australian"),
+        ("Rob Henley",      "English"),
+        ("Jack Prescott",   "American"),
+        ("Chris Alderton",  "English"),
+        ("Neil Stanton",    "Scottish"),
+        ("Ben Crowther",    "English"),
+        ("Andy Mason",      "American"),
+        ("Phil Barnett",    "Irish"),
+        ("Dave Kirkwood",   "Australian"),
+        ("Steve Pullman",   "American"),
+        ("Finn O'Brien",    "Irish"),
+        ("Luke Carver",     "English"),
+        ("Kyle Rutherford", "American"),
+        ("Ollie Prentice",  "English"),
+        ("Will Dempsey",    "American"),
+        ("Jamie Stafford",  "Scottish"),
+        ("Harry Booth",     "English"),
+        ("Connor Reid",     "Scottish"),
+        ("Ryan McBride",    "Irish"),
+        ("Lee Forsyth",     "English"),
+        ("Ewan Mackay",     "Scottish"),
+        ("Callum Drake",    "English"),
+        ("Aaron Whitfield", "American"),
+        ("Greg Lawton",     "English"),
+    ],
+    2: [
+        ("Marco Silva",     "Spanish"),
+        ("Sven Larsen",     "Swedish"),
+        ("Brett Hollis",    "Australian"),
+        ("Kenji Mori",      "Japanese"),
+        ("Carlos Vega",     "Argentine"),
+        ("Padraig Cullen",  "Irish"),
+        ("Tyler Monroe",    "American"),
+        ("Niall Harrington","Irish"),
+        ("Scott Pemberton", "English"),
+        ("Henrik Bergh",    "Swedish"),
+        ("Dirk Volker",     "German"),
+        ("Ross Templeton",  "Scottish"),
+        ("Chad Holloway",   "American"),
+        ("Luca Ferrari",    "Italian"),
+        ("Paul Mercer",     "English"),
+        ("Jesper Strand",   "Danish"),
+        ("Gareth Bevan",    "Welsh"),
+        ("Tae-Yang Kwon",   "South Korean"),
+        ("Nathan Blythe",   "English"),
+        ("Álvaro Ruiz",     "Spanish"),
+        ("Sean Gallagher",  "Irish"),
+        ("Alex Drummond",   "Scottish"),
+        ("Blake Sutherland","Australian"),
+        ("Chris De Waal",   "South African"),
+        ("Pierre Bonnet",   "French"),
+        ("Mikkel Skov",     "Danish"),
+        ("Declan Murray",   "Irish"),
+        ("Rob Van Dam",     "German"),
+        ("Haruto Tanaka",   "Japanese"),
+        ("Drew Pemberton",  "English"),
+    ],
+    3: [
+        ("Felipe Soares",   "Argentine"),
+        ("Max Schreiber",   "German"),
+        ("Rory Flanagan",   "Irish"),
+        ("Takeshi Ito",     "Japanese"),
+        ("Leon Fourie",     "South African"),
+        ("Emile Dubois",    "French"),
+        ("Cian McCarthy",   "Irish"),
+        ("Axel Nyman",      "Swedish"),
+        ("Brendan Kirk",    "Australian"),
+        ("Ji-Hoon Park",    "South Korean"),
+        ("Hugo Fernandez",  "Spanish"),
+        ("Oliver Marsh",    "English"),
+        ("Kyle Brannigan",  "American"),
+        ("Matteo Gallo",    "Italian"),
+        ("Pieter Steyn",    "South African"),
+        ("Finn Eriksen",    "Norwegian"),
+        ("Dean Wainwright", "English"),
+        ("Soo-Jin Lee",     "South Korean"),
+        ("Callum Thorpe",   "Scottish"),
+        ("Ricardo Morales", "Spanish"),
+        ("Shane Doyle",     "Irish"),
+        ("Victor Holt",     "American"),
+        ("Tomás Blanco",    "Argentine"),
+        ("Luke Fairweather","English"),
+        ("Jacques Morel",   "French"),
+        ("Craig Forsyth",   "Scottish"),
+        ("Kota Fujii",      "Japanese"),
+        ("Marc De Bruyne",  "German"),
+        ("Warren Cole",     "Australian"),
+        ("Daan Visser",     "South African"),
+    ],
+    4: [
+        ("Rafael Romero",   "Spanish"),
+        ("Seamus Quinn",    "Irish"),
+        ("Tyler Blackwood", "American"),
+        ("Lars Magnusson",  "Swedish"),
+        ("Jae-Won Oh",      "South Korean"),
+        ("Stefan Richter",  "German"),
+        ("Cormac Fallon",   "Irish"),
+        ("Yasuhiro Kato",   "Japanese"),
+        ("Ruan Pienaar",    "South African"),
+        ("Baptiste Colin",  "French"),
+        ("Callum Stirling", "Scottish"),
+        ("Oliver Sheridan", "English"),
+        ("Beau Whitmore",   "Australian"),
+        ("Massimo Ricci",   "Italian"),
+        ("Matias Lobos",    "Argentine"),
+        ("Magnus Søndergaard","Danish"),
+        ("Connor Ashworth", "American"),
+        ("Min-Jae Yoon",    "South Korean"),
+        ("Tomás Iglesias",  "Spanish"),
+        ("Reece Hargreaves","English"),
+        ("Dieter Brandt",   "German"),
+        ("Ben McAlpine",    "Scottish"),
+        ("Lachlan Perry",   "Australian"),
+        ("Marco Cattaneo",  "Italian"),
+        ("Pablo Acosta",    "Argentine"),
+        ("Erik Lindqvist",  "Swedish"),
+        ("Ciarán Nolan",    "Irish"),
+        ("Kyle Easton",     "American"),
+        ("Francois Bonhomme","French"),
+        ("Taro Shimizu",    "Japanese"),
+    ],
+    5: [
+        ("Alejandro Cruz",  "Spanish"),
+        ("Blake Harrington","American"),
+        ("Niall Brennan",   "Irish"),
+        ("Ryo Kawashima",   "Japanese"),
+        ("Erik Van Houten", "German"),
+        ("Stuart Mackenzie","Scottish"),
+        ("Ethan Crossley",  "English"),
+        ("Sung-Min Han",    "South Korean"),
+        ("Johan Nilsson",   "Swedish"),
+        ("Luke Beaumont",   "Australian"),
+        ("Antoine Laurent", "French"),
+        ("Jake Pendleton",  "American"),
+        ("Ruan Van Niekerk","South African"),
+        ("Dario Mancini",   "Italian"),
+        ("Ryan Callahan",   "American"),
+        ("Seok-Ho Kim",     "South Korean"),
+        ("Federico Ramos",  "Argentine"),
+        ("Kristian Borg",   "Swedish"),
+        ("Marcus Ashford",  "English"),
+        ("Sho Yamamoto",    "Japanese"),
+        ("Conor Donoghue",  "Irish"),
+        ("Brett Coldwell",  "Australian"),
+        ("Damien Leclerc",  "French"),
+        ("Shane Preston",   "American"),
+        ("Gregor Wishart",  "Scottish"),
+        ("Pieter Du Plessis","South African"),
+        ("Lorenzo Amato",   "Italian"),
+        ("Patrick Carey",   "Irish"),
+        ("Kai Hoffmann",    "German"),
+        ("Oliver Huntley",  "English"),
+    ],
+    6: [
+        ("Tiger Blackwood", "American"),
+        ("Rory Cassidy",    "Irish"),
+        ("Jon Bergman",     "Swedish"),
+        ("Hideki Suzuki",   "Japanese"),
+        ("Luke Champion",   "Australian"),
+        ("Carlos Maestro",  "Spanish"),
+        ("Stefan Von Berg", "German"),
+        ("Young-Ho Shin",   "South Korean"),
+        ("Ethan Masters",   "American"),
+        ("Paul Ashby",      "English"),
+        ("François Grand",  "French"),
+        ("Marco Eletto",    "Italian"),
+        ("Shane O'Connor",  "Irish"),
+        ("Brad Glendale",   "Australian"),
+        ("Magnus Elite",    "Danish"),
+        ("Scott Sovereign", "Scottish"),
+        ("Tomás El Grande", "Argentine"),
+        ("Kei Nakamura",    "Japanese"),
+        ("Chris Colossus",  "American"),
+        ("Min-Jun Cho",     "South Korean"),
+        ("Henrik Ekholm",   "Swedish"),
+        ("Liam Platinum",   "Irish"),
+        ("Devon Sterling",  "English"),
+        ("Pieter Supreme",  "South African"),
+        ("Rafael Celestino","Spanish"),
+        ("André Légend",    "French"),
+        ("Oliver Dominic",  "English"),
+        ("Dirk Pinnacle",   "German"),
+        ("Brendan Summit",  "Australian"),
+        ("Max Prestige",    "German"),
+    ],
+}
+
+
+def get_opponent_pool(tour_level: int) -> list[Opponent]:
+    """
+    Return a list of 30 Opponent objects for the given tour level.
+    Skills are distributed evenly across the tour's skill range.
+    """
+    lo, hi = SKILL_RANGES.get(tour_level, (0.22, 0.38))
+    names  = _NAMES.get(tour_level, _NAMES[1])
+    n      = len(names)
+    opps   = []
+    for i, (name, nat) in enumerate(names):
+        # Even spread: weakest at index 0, strongest at index n-1
+        skill = lo + (hi - lo) * i / max(1, n - 1)
+        opps.append(Opponent(name, nat, round(skill, 3)))
+    return opps
