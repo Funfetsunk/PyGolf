@@ -39,8 +39,7 @@ C_RED        = (200,  55,  55)
 C_RED_HOV    = (230,  80,  80)
 C_RED_DIM    = ( 80,  24,  24)
 
-SCREEN_W = 1280
-SCREEN_H = 720
+from src.constants import SCREEN_W, SCREEN_H
 
 TOUR_NAMES = {
     1: "Amateur Circuit",

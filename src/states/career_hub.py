@@ -16,9 +16,7 @@ from src.career.player    import STAT_KEYS, BASE_STAT, MAX_STAT, ACHIEVEMENTS
 from src.career.tournament import TOUR_DISPLAY_NAMES, EVENTS_PER_SEASON
 from src.career.staff      import STAFF_TYPES, STAFF_ORDER
 from src.career.sponsorship import get_available_sponsors, is_target_met, progress_label
-
-SCREEN_W = 1280
-SCREEN_H  = 720
+from src.constants          import SCREEN_W, SCREEN_H
 
 CONTENT_X  = 15
 CONTENT_Y  = 106   # below tab bar

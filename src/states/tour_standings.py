@@ -29,8 +29,8 @@ C_BTN_HOV   = ( 48, 120,  48)
 C_BTN_RED   = ( 78,  28,  28)
 C_BTN_RED_H = (120,  48,  48)
 
-SCREEN_W  = 1280
-SCREEN_H  = 720
+from src.constants import SCREEN_W, SCREEN_H
+
 ROW_H     = 22
 MAX_ROWS  = 22
 

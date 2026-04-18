@@ -30,8 +30,8 @@ C_BTN_HOV   = ( 55, 145,  55)
 C_PLAYER_BG = ( 20,  55,  20)
 C_PLAYER_BD = ( 60, 160,  60)
 
-SCREEN_W   = 1280
-SCREEN_H   = 720
+from src.constants import SCREEN_W, SCREEN_H
+
 LB_ROW_H   = 30   # leaderboard row height
 
 _ROUND_DESCRIPTIONS = [

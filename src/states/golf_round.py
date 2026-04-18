@@ -41,8 +41,8 @@ _ROLL_FRAC = {
     Terrain.GREEN:      0.08,
     Terrain.WATER:      0.0,
 }
-SCREEN_W   = 1280
-SCREEN_H   = 720
+
+from src.constants import SCREEN_W, SCREEN_H
 
 # ── Colours ───────────────────────────────────────────────────────────────────
 C_WHITE      = (255, 255, 255)

@@ -32,8 +32,8 @@ C_BTN_DIS   = ( 38,  52,  38)
 C_BTN_SML   = ( 38,  55,  38)
 C_BTN_SML_H = ( 60,  90,  60)
 
-SCREEN_W = 1280
-SCREEN_H = 720
+from src.constants import SCREEN_W, SCREEN_H
+
 BONUS_TOTAL = 30
 
 # (stat_key, display_name, short_description)
