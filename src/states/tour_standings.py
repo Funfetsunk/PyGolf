@@ -368,12 +368,14 @@ class TourStandingsState:
             s = self.font_hdr.render(h, True, (150, 200, 120))
             surface.blit(s, (col[i] + 4, ty + 4))
 
+        total_in_table = len(self._standings)
         visible = self._standings[self._scroll: self._scroll + MAX_ROWS]
         for row_i, entry in enumerate(visible):
             real_pos = self._scroll + row_i + 1
             ry       = ty + 24 + row_i * ROW_H
             is_pl    = entry["is_player"]
             in_promo = threshold and real_pos <= threshold
+            is_last  = is_pl and real_pos == total_in_table
 
             # Row background
             if is_pl:
@@ -396,7 +398,10 @@ class TourStandingsState:
                          (col[0] + 4, ry + 3))
 
             name_str = ("★ " + entry["name"]) if is_pl else entry["name"]
-            surface.blit(self.font_small.render(name_str, True, tc),
+            if is_last:
+                name_str += "   — last place"
+            name_col = (210, 120, 120) if is_last else tc
+            surface.blit(self.font_small.render(name_str, True, name_col),
                          (col[1] + 4, ry + 3))
 
             surface.blit(self.font_small.render(entry["nationality"], True, C_GRAY),
