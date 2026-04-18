@@ -6,57 +6,13 @@ helper used by courses_data.py.  courses_data.make_greenfields_course() is
 included via get_courses_for_tour_id() so callers always get ≥2 courses.
 """
 
-from src.course.course import Course
-from src.course.hole   import Hole
-
-_R = 36   # grid rows
-_C = 48   # grid cols
-
-_CHAR = {
-    'bunker':     'B',
-    'water':      'W',
-    'trees':      'T',
-    'deep_rough': 'D',
-}
+from src.course.course    import Course
+from src.data._hole_factory import build_hole
 
 
 def _h(number, par, yardage, tee, pin, fw, feats=None):
-    """Build one hole — identical logic to courses_data._make_hole."""
-    tc, tr = tee
-    pc, pr = pin
-    grid = [['R'] * _C for _ in range(_R)]
-
-    for c in range(_C):
-        grid[0][c] = grid[1][c] = grid[_R - 1][c] = 'T'
-    for r in range(_R):
-        grid[r][0] = grid[r][1] = grid[r][_C - 1] = grid[r][_C - 2] = 'T'
-
-    for r1, r2, c1, c2 in (fw or []):
-        for r in range(r1, r2 + 1):
-            for c in range(c1, c2 + 1):
-                if 2 <= r < _R - 1 and 2 <= c < _C - 2:
-                    grid[r][c] = 'F'
-
-    for ftype, r1, r2, c1, c2 in (feats or []):
-        ch = _CHAR[ftype]
-        for r in range(r1, r2 + 1):
-            for c in range(c1, c2 + 1):
-                if 0 <= r < _R and 0 <= c < _C:
-                    grid[r][c] = ch
-
-    for r in range(max(2, pr - 1), min(_R - 1, pr + 3)):
-        for c in range(max(2, pc - 4), min(_C - 2, pc + 5)):
-            grid[r][c] = 'G'
-
-    for r in range(max(2, tr - 1), min(_R - 1, tr + 1)):
-        for c in range(max(2, tc - 3), min(_C - 2, tc + 3)):
-            grid[r][c] = 'X'
-
-    return Hole(
-        number=number, par=par, yardage=yardage,
-        tee_pos=tee, pin_pos=pin,
-        grid=[''.join(row) for row in grid],
-    )
+    """Thin wrapper — keeps existing positional-arg call sites readable."""
+    return build_hole(number, par, yardage, tee, pin, fw, feats)
 
 
 # ═════════════════════════════════════════════════════════════════════════════
