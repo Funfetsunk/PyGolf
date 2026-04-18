@@ -588,6 +588,16 @@ class CareerHubState:
                                         C_GOLD if p.world_rank == 1 else C_GRAY)
             surface.blit(rl, (r.x + 40, ty)); ty += 22
 
+        # Promotion requirements — surface the gate before the player hits it.
+        promo_lines = self._promotion_requirement_lines(p)
+        if promo_lines:
+            hdr = self.font_small.render("Promotion:", True, (150, 180, 120))
+            surface.blit(hdr, (r.x + 40, ty)); ty += 16
+            for text, ok in promo_lines:
+                col = C_GREEN if ok else C_GOLD
+                s = self.font_small.render("  " + text, True, col)
+                surface.blit(s, (r.x + 40, ty)); ty += 16
+
         # Active sponsor
         if p.active_sponsor:
             sp_name = p.active_sponsor["name"]
@@ -908,6 +918,38 @@ class CareerHubState:
                          pygame.Rect(x, y, w, 28), border_radius=6)
         ts = self.font_hdr.render(label, True, (150, 210, 120))
         surface.blit(ts, (x + 10, y + 6))
+
+    @staticmethod
+    def _promotion_requirement_lines(p) -> list[tuple[str, bool]]:
+        """Human-readable list of requirements for promotion off the current tour.
+
+        Each entry is (line, satisfied). Returns [] for tours with no gate
+        beyond finishing the season (Tour 6, or when already qualified).
+        """
+        from src.career.tournament import PROMOTION_THRESHOLD
+        lvl = p.tour_level
+        threshold = PROMOTION_THRESHOLD.get(lvl)
+        if threshold is None:
+            return []
+
+        if lvl == 4:
+            if p.qschool_pending:
+                attempts = max(1, p.qschool_attempts_remaining or 1)
+                return [(f"Q-School qualified — "
+                         f"{attempts} attempt{'s' if attempts != 1 else ''} ready", True)]
+            return [(f"Finish top {threshold} to earn Q-School", False)]
+
+        if lvl == 5:
+            rank_ok = p.world_rank <= 50
+            rank_line = (f"World Rank ≤ 50  (You: #{p.world_rank})"
+                         if p.world_rank < 201
+                         else "World Rank ≤ 50  (unranked)")
+            return [
+                (f"Finish top {threshold} in the season", False),
+                (rank_line, rank_ok),
+            ]
+
+        return [(f"Finish top {threshold} in the season", False)]
 
     @staticmethod
     def _driver_hint(set_name: str) -> str:
