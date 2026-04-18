@@ -318,7 +318,8 @@ class CareerHubState:
                 [course.get_hole(i).par for i in range(course.total_holes)],
                 opps, is_qschool=True,
                 event_number=1, total_events=1,
-                rng_seed=qs_seed)
+                rng_seed=qs_seed,
+                course_name=course.name)
             p.qschool_pending = False
             self.game.current_tournament = t
             self.game.change_state(GolfRoundState(self.game, course, 0, []))
@@ -357,7 +358,7 @@ class CareerHubState:
                 [course.get_hole(i).par for i in range(course.total_holes)],
                 opps, is_major=True, event_number=event_n, total_events=total,
                 major_id=major_id, major_prize_fund=prize_fund,
-                rng_seed=ev_seed)
+                rng_seed=ev_seed, course_name=course.name)
         else:
             _NAMES = {1: "Amateur", 2: "Challenger", 3: "Development",
                       4: "Continental", 5: "World", 6: "Grand"}
@@ -366,7 +367,7 @@ class CareerHubState:
                 name, p.tour_level,
                 [course.get_hole(i).par for i in range(course.total_holes)],
                 opps, is_major=False, event_number=event_n, total_events=total,
-                rng_seed=ev_seed)
+                rng_seed=ev_seed, course_name=course.name)
 
         self.game.current_tournament = t
         self.game.change_state(GolfRoundState(self.game, course, 0, []))

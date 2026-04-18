@@ -71,10 +71,14 @@ class Tournament:
                  major_id: str | None = None,
                  major_prize_fund: int | None = None,
                  is_qschool: bool = False,
-                 rng_seed: int | None = None):
+                 rng_seed: int | None = None,
+                 course_name: str | None = None):
         import random as _random
         self.name         = name
         self.tour_level   = tour_level
+        # Course this event is being played on — persisted so a mid-round save
+        # can rebuild the same course on resume. None only for legacy saves.
+        self.course_name  = course_name
         self.hole_pars    = list(hole_pars)
         self.course_par   = sum(hole_pars)
         self.opponents    = opponents
@@ -241,6 +245,7 @@ class Tournament:
             "total_events":  self.total_events,
             "prize_fund":    self.prize_fund,
             "rng_seed":      self.rng_seed,
+            "course_name":   self.course_name,
             "player_rounds": [list(r) for r in self.player_rounds],
             "opp_holes":     {k: [list(r) for r in v]
                               for k, v in self._opp_holes.items()},
@@ -266,6 +271,7 @@ class Tournament:
         t.total_events = data.get("total_events", 8)
         t.prize_fund   = data.get("prize_fund", 0)
         t.rng_seed     = int(data.get("rng_seed", 0))
+        t.course_name  = data.get("course_name", None)
         t.player_rounds = [list(r) for r in data.get("player_rounds", [])]
         t._opp_holes    = {k: [list(r) for r in v]
                            for k, v in data.get("opp_holes", {}).items()}

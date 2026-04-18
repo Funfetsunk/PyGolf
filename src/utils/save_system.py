@@ -33,14 +33,21 @@ def save_path_for(player_name: str) -> str:
     return os.path.join(SAVE_DIR, f"{_safe_filename(player_name)}.json")
 
 
-def save_game(player: Player, tournament=None) -> str:
-    """Serialise the player (and optional active tournament) to JSON."""
+def save_game(player: Player, tournament=None, round_state: dict | None = None) -> str:
+    """Serialise the player (and optional active tournament and in-progress
+    round state) to JSON.
+
+    ``round_state`` captures the mid-round state needed to resume: hole index,
+    strokes, hole scores so far, ball position, wind, last-safe position.
+    Pass ``None`` when the player is not currently on a hole.
+    """
     os.makedirs(SAVE_DIR, exist_ok=True)
     path = save_path_for(player.name)
     data = {
         "save_format": SAVE_FORMAT,
         "player":      player.to_dict(),
         "tournament":  tournament.to_dict() if tournament is not None else None,
+        "round_state": round_state,
     }
     with open(path, "w", encoding="utf-8") as f:
         json.dump(data, f, indent=2)
@@ -48,7 +55,7 @@ def save_game(player: Player, tournament=None) -> str:
 
 
 def load_game(path: str):
-    """Load a save file; returns (Player, tournament_dict_or_None).
+    """Load a save file; returns (Player, tournament_dict_or_None, round_state_or_None).
 
     Raises SaveCorruptError for unparseable files and SaveVersionError for
     files written by an incompatible build.
@@ -70,7 +77,7 @@ def load_game(path: str):
     except (KeyError, TypeError, ValueError) as exc:
         raise SaveCorruptError(f"Save is missing required player data: {exc}") from exc
 
-    return player, data.get("tournament")
+    return player, data.get("tournament"), data.get("round_state")
 
 
 def list_saves() -> list[str]:

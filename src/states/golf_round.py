@@ -54,14 +54,19 @@ C_YELLOW     = (255, 220,   0)
 class GolfRoundState:
     """Plays a single hole within a full round."""
 
-    def __init__(self, game, course, hole_index, scores=None):
+    def __init__(self, game, course, hole_index, scores=None,
+                 resume_state: dict | None = None):
         """
         Parameters
         ----------
-        game        : Game — the main game object (used for state transitions)
-        course      : Course — the 18-hole course being played
-        hole_index  : int — 0-based index of the hole to play (0..17)
-        scores      : list[int] — stroke totals already recorded (holes 0..hole_index-1)
+        game         : Game — the main game object (used for state transitions)
+        course       : Course — the 18-hole course being played
+        hole_index   : int — 0-based index of the hole to play (0..17)
+        scores       : list[int] — stroke totals already recorded
+        resume_state : dict | None — mid-hole state to restore (ball pos,
+                       strokes, wind). See `_collect_round_state()` for the
+                       schema. When present, overrides the normal fresh-hole
+                       initialisation after the hole is built.
         """
         self.game        = game
         self.course      = course
@@ -123,6 +128,15 @@ class GolfRoundState:
         self._bounce_in_progress = False   # True while tree-bounce is animating
 
         self._auto_select_club()
+
+        # Apply resume state if one was provided (from a mid-round save).
+        # Applied after _auto_select_club so the club index we restore wins.
+        if resume_state is not None:
+            self._apply_resume_state(resume_state)
+
+        # Pause overlay (ESC) state.
+        self._paused = False
+        self._pause_hover = None   # "resume" or "quit"
 
         # Show a one-time tutorial modal on the player's very first round.
         # Gated by Player.tutorial_seen so it only fires once per career.
@@ -204,6 +218,17 @@ class GolfRoundState:
         if self._show_tutorial:
             if event.type in (pygame.MOUSEBUTTONDOWN, pygame.KEYDOWN):
                 self._dismiss_tutorial()
+            return
+
+        # Pause overlay — ESC toggles, clicks on its buttons act.
+        if self._paused:
+            self._handle_pause_event(event)
+            return
+
+        if event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
+            # Cancel any in-progress aim and open the pause menu.
+            self.shot_ctrl.cancel()
+            self._paused = True
             return
 
         if self.hole_complete:
@@ -312,6 +337,11 @@ class GolfRoundState:
 
         from src.utils.sound_manager import SoundManager
         SoundManager.instance().update(dt)
+
+        # Freeze simulation while paused — flag/ambient still tick, but the
+        # ball, camera, and message timers stay still until the player resumes.
+        if self._paused:
+            return
 
         if self.hole_complete:
             self.complete_timer += dt
@@ -620,6 +650,9 @@ class GolfRoundState:
         if self._show_tutorial:
             self._draw_tutorial_overlay(surface)
 
+        if self._paused:
+            self._draw_pause_overlay(surface)
+
     def _dismiss_tutorial(self):
         self._show_tutorial = False
         if self.game.player is not None:
@@ -665,6 +698,121 @@ class GolfRoundState:
         hint = font_hint.render("Click anywhere to continue.", True, (180, 200, 160))
         surface.blit(hint, (panel.centerx - hint.get_width() // 2,
                             panel.bottom - 34))
+
+    # ── Pause / resume ────────────────────────────────────────────────────────
+
+    def _pause_rects(self):
+        pw, ph = 420, 230
+        px = (VIEWPORT_W - pw) // 2
+        py = (VIEWPORT_H - ph) // 2
+        panel = pygame.Rect(px, py, pw, ph)
+        bw, bh = 260, 44
+        resume = pygame.Rect(panel.centerx - bw // 2, panel.y + 90,  bw, bh)
+        quit_  = pygame.Rect(panel.centerx - bw // 2, panel.y + 150, bw, bh)
+        return panel, resume, quit_
+
+    def _handle_pause_event(self, event):
+        if event.type == pygame.KEYDOWN:
+            if event.key == pygame.K_ESCAPE:
+                self._paused = False
+            return
+        _, resume, quit_ = self._pause_rects()
+        if event.type == pygame.MOUSEMOTION:
+            p = event.pos
+            self._pause_hover = (
+                "resume" if resume.collidepoint(p) else
+                "quit"   if quit_.collidepoint(p)  else
+                None)
+        elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+            p = event.pos
+            if resume.collidepoint(p):
+                self._paused = False
+            elif quit_.collidepoint(p):
+                self._save_and_quit_to_menu()
+
+    def _save_and_quit_to_menu(self):
+        """Persist the in-progress round and return to the main menu."""
+        try:
+            from src.utils.save_system import save_game
+            save_game(self.game.player,
+                      self.game.current_tournament,
+                      round_state=self._collect_round_state())
+        except Exception as e:
+            print(f"Mid-round save failed: {e}")
+        from src.states.main_menu import MainMenuState
+        self.game.change_state(MainMenuState(self.game))
+
+    def _collect_round_state(self) -> dict:
+        """Snapshot everything needed to resume this hole mid-round."""
+        return {
+            "hole_index":    self.hole_index,
+            "strokes":       self.strokes,
+            "scores":        list(self.scores),
+            "ball_x":        float(self.ball.x),
+            "ball_y":        float(self.ball.y),
+            "wind_angle":    float(self.wind_angle),
+            "wind_strength": int(self.wind_strength),
+            "last_safe_x":   float(self._last_safe_x),
+            "last_safe_y":   float(self._last_safe_y),
+            "club_idx":      int(self.club_idx),
+        }
+
+    def _apply_resume_state(self, s: dict) -> None:
+        """Restore the mid-hole state captured by `_collect_round_state`."""
+        self.strokes       = int(s.get("strokes", 0))
+        self.scores        = list(s.get("scores", self.scores))
+        bx = s.get("ball_x")
+        by = s.get("ball_y")
+        if bx is not None and by is not None:
+            self.ball.place(float(bx), float(by))
+        self.wind_angle    = float(s.get("wind_angle", self.wind_angle))
+        self.wind_strength = int(s.get("wind_strength", self.wind_strength))
+        self._last_safe_x  = float(s.get("last_safe_x", self.ball.x))
+        self._last_safe_y  = float(s.get("last_safe_y", self.ball.y))
+        ci = int(s.get("club_idx", self.club_idx))
+        if 0 <= ci < len(self.clubs):
+            self.club_idx = ci
+        # Recentre camera on the restored ball position.
+        self.cam_x = self.ball.x - VIEWPORT_W / 2
+        self.cam_y = self.ball.y - VIEWPORT_H / 2
+        self._clamp_camera()
+
+    def _draw_pause_overlay(self, surface):
+        dim = pygame.Surface((VIEWPORT_W, VIEWPORT_H), pygame.SRCALPHA)
+        dim.fill((0, 0, 0, 180))
+        surface.blit(dim, (0, 0))
+
+        panel, resume, quit_ = self._pause_rects()
+        pygame.draw.rect(surface, (14, 22, 14), panel, border_radius=12)
+        pygame.draw.rect(surface, (58, 98, 58), panel, 2, border_radius=12)
+
+        title_font = pygame.font.SysFont("arial", 28, bold=True)
+        body_font  = pygame.font.SysFont("arial", 18)
+        btn_font   = pygame.font.SysFont("arial", 20, bold=True)
+
+        title = title_font.render("Paused", True, (168, 224, 88))
+        surface.blit(title, (panel.centerx - title.get_width() // 2, panel.y + 22))
+
+        hint = body_font.render(
+            "Save & Quit returns to the main menu. You can load this save to continue.",
+            True, (190, 200, 180))
+        if hint.get_width() > panel.width - 32:
+            # Wrap on two lines if it's too wide.
+            hint1 = body_font.render("Save & Quit returns to the main menu.", True, (190, 200, 180))
+            hint2 = body_font.render("Load this save to continue.",            True, (190, 200, 180))
+            surface.blit(hint1, (panel.centerx - hint1.get_width() // 2, panel.y + 56))
+            surface.blit(hint2, (panel.centerx - hint2.get_width() // 2, panel.y + 74))
+        else:
+            surface.blit(hint, (panel.centerx - hint.get_width() // 2, panel.y + 60))
+
+        for rect, key, label in [(resume, "resume", "Resume (Esc)"),
+                                 (quit_,  "quit",   "Save & Quit to Menu")]:
+            hov = (self._pause_hover == key)
+            bg  = (48, 120, 48) if hov else (28, 78, 28)
+            pygame.draw.rect(surface, bg, rect, border_radius=7)
+            pygame.draw.rect(surface, (58, 98, 58), rect, 2, border_radius=7)
+            lbl = btn_font.render(label, True, (255, 255, 255))
+            surface.blit(lbl, lbl.get_rect(center=rect.center))
 
     def _draw_aim_arrow(self, surface, start, end, power):
         r = int(min(255, power * 2 * 255))

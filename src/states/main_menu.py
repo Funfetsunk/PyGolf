@@ -249,7 +249,7 @@ class MainMenuState:
 
     def _load_save(self, preview: dict):
         try:
-            player, tourn_data = load_game(preview["path"])
+            player, tourn_data, round_state = load_game(preview["path"])
         except (SaveVersionError, SaveCorruptError) as e:
             self._load_error       = str(e)
             self._load_error_timer = 4.0
@@ -270,7 +270,43 @@ class MainMenuState:
         else:
             self.game.current_tournament = None
 
+        # Mid-round resume path: if the save captured an in-progress hole,
+        # rebuild the course by name and drop straight back into the round.
+        if round_state and self.game.current_tournament is not None:
+            if self._resume_round(round_state):
+                return
+            # Resume failed — fall through to the hub so the career isn't lost.
+            self._load_error       = "Could not resume the in-progress round; the course was not found. Your career is intact."
+            self._load_error_timer = 5.0
+
         self._launch_game()
+
+    def _resume_round(self, round_state: dict) -> bool:
+        """Rebuild the course the player was on and re-enter GolfRoundState.
+
+        Returns True on success, False if the course can't be found.
+        """
+        t = self.game.current_tournament
+        if t is None or not t.course_name:
+            return False
+        try:
+            from src.data.tours_data import get_courses_for_tour
+            from src.career.tour import get_tour_id
+            tour_id = get_tour_id(t.tour_level)
+            courses = get_courses_for_tour(tour_id) or []
+            course  = next((c for c in courses if c.name == t.course_name), None)
+            if course is None:
+                return False
+            from src.states.golf_round import GolfRoundState
+            self.game.change_state(
+                GolfRoundState(self.game, course,
+                               int(round_state.get("hole_index", 0)),
+                               list(round_state.get("scores", [])),
+                               resume_state=round_state))
+            return True
+        except Exception as e:
+            print(f"Resume failed: {e}")
+            return False
 
     def _delete_save(self, idx: int):
         """Delete the save file at index idx, then refresh the list."""
