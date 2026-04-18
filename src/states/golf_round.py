@@ -724,31 +724,46 @@ class GolfRoundState:
     # ── Pause / resume ────────────────────────────────────────────────────────
 
     def _pause_rects(self):
-        pw, ph = 420, 230
+        pw, ph = 420, 290
         px = (VIEWPORT_W - pw) // 2
         py = (VIEWPORT_H - ph) // 2
         panel = pygame.Rect(px, py, pw, ph)
         bw, bh = 260, 44
         resume = pygame.Rect(panel.centerx - bw // 2, panel.y + 90,  bw, bh)
-        quit_  = pygame.Rect(panel.centerx - bw // 2, panel.y + 150, bw, bh)
-        return panel, resume, quit_
+        audio  = pygame.Rect(panel.centerx - bw // 2, panel.y + 150, bw, bh)
+        quit_  = pygame.Rect(panel.centerx - bw // 2, panel.y + 210, bw, bh)
+        return panel, resume, audio, quit_
+
+    def _audio_settings(self):
+        """Lazily-built shared audio-settings panel for the pause menu."""
+        if not hasattr(self, "_audio_panel"):
+            from src.ui.audio_settings import AudioSettingsPanel
+            self._audio_panel = AudioSettingsPanel(SCREEN_W, SCREEN_H)
+        return self._audio_panel
 
     def _handle_pause_event(self, event):
+        # Audio settings panel eats input while open.
+        if self._audio_settings().visible:
+            self._audio_settings().handle_event(event)
+            return
         if event.type == pygame.KEYDOWN:
             if event.key == pygame.K_ESCAPE:
                 self._paused = False
             return
-        _, resume, quit_ = self._pause_rects()
+        _, resume, audio, quit_ = self._pause_rects()
         if event.type == pygame.MOUSEMOTION:
             p = event.pos
             self._pause_hover = (
                 "resume" if resume.collidepoint(p) else
+                "audio"  if audio.collidepoint(p)  else
                 "quit"   if quit_.collidepoint(p)  else
                 None)
         elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
             p = event.pos
             if resume.collidepoint(p):
                 self._paused = False
+            elif audio.collidepoint(p):
+                self._audio_settings().open()
             elif quit_.collidepoint(p):
                 self._save_and_quit_to_menu()
 
@@ -804,7 +819,7 @@ class GolfRoundState:
         dim.fill((0, 0, 0, 180))
         surface.blit(dim, (0, 0))
 
-        panel, resume, quit_ = self._pause_rects()
+        panel, resume, audio, quit_ = self._pause_rects()
         pygame.draw.rect(surface, (14, 22, 14), panel, border_radius=12)
         pygame.draw.rect(surface, (58, 98, 58), panel, 2, border_radius=12)
 
@@ -815,19 +830,13 @@ class GolfRoundState:
         title = title_font.render("Paused", True, (168, 224, 88))
         surface.blit(title, (panel.centerx - title.get_width() // 2, panel.y + 22))
 
-        hint = body_font.render(
-            "Save & Quit returns to the main menu. You can load this save to continue.",
-            True, (190, 200, 180))
-        if hint.get_width() > panel.width - 32:
-            # Wrap on two lines if it's too wide.
-            hint1 = body_font.render("Save & Quit returns to the main menu.", True, (190, 200, 180))
-            hint2 = body_font.render("Load this save to continue.",            True, (190, 200, 180))
-            surface.blit(hint1, (panel.centerx - hint1.get_width() // 2, panel.y + 56))
-            surface.blit(hint2, (panel.centerx - hint2.get_width() // 2, panel.y + 74))
-        else:
-            surface.blit(hint, (panel.centerx - hint.get_width() // 2, panel.y + 60))
+        hint1 = body_font.render("Save & Quit returns to the main menu.", True, (190, 200, 180))
+        hint2 = body_font.render("Load this save to continue.",            True, (190, 200, 180))
+        surface.blit(hint1, (panel.centerx - hint1.get_width() // 2, panel.y + 56))
+        surface.blit(hint2, (panel.centerx - hint2.get_width() // 2, panel.y + 74))
 
         for rect, key, label in [(resume, "resume", "Resume (Esc)"),
+                                 (audio,  "audio",  "Audio Settings"),
                                  (quit_,  "quit",   "Save & Quit to Menu")]:
             hov = (self._pause_hover == key)
             bg  = (48, 120, 48) if hov else (28, 78, 28)
@@ -835,6 +844,10 @@ class GolfRoundState:
             pygame.draw.rect(surface, (58, 98, 58), rect, 2, border_radius=7)
             lbl = btn_font.render(label, True, (255, 255, 255))
             surface.blit(lbl, lbl.get_rect(center=rect.center))
+
+        # Render the audio panel on top if it's open.
+        if hasattr(self, "_audio_panel") and self._audio_panel.visible:
+            self._audio_panel.draw(surface)
 
     def _draw_aim_arrow(self, surface, start, end, power):
         from src.golf.shot import ShotShape, SHAPE_CURVE_FRACTION

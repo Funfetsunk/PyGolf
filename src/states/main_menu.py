@@ -104,16 +104,10 @@ class MainMenuState:
         # Settings button (bottom-right)
         self._btn_settings = pygame.Rect(SCREEN_W - 140, SCREEN_H - 50, 125, 34)
         self._hovered_settings = False
-        self._show_settings = False
 
-        # Settings overlay panel
-        sp2_w, sp2_h = 440, 280
-        self._settings_panel = pygame.Rect(
-            cx - sp2_w // 2, (SCREEN_H - sp2_h) // 2, sp2_w, sp2_h)
-        self._settings_close = pygame.Rect(
-            self._settings_panel.centerx - 80,
-            self._settings_panel.bottom - 50, 160, 34)
-        # Per-row +/- rects are built in draw
+        # Shared audio-settings overlay.
+        from src.ui.audio_settings import AudioSettingsPanel
+        self._audio_panel = AudioSettingsPanel(SCREEN_W, SCREEN_H)
 
     # ── Event handling ────────────────────────────────────────────────────────
 
@@ -121,8 +115,7 @@ class MainMenuState:
         if self._confirm_idx is not None:
             self._handle_confirm_event(event)
             return
-        if self._show_settings:
-            self._handle_settings_event(event)
+        if self._audio_panel.handle_event(event):
             return
         if self._show_saves:
             self._handle_save_panel_event(event)
@@ -141,7 +134,7 @@ class MainMenuState:
         elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
             p = event.pos
             if self._btn_settings.collidepoint(p):
-                self._show_settings = True
+                self._audio_panel.open()
                 return
             if self._btn_new.collidepoint(p):
                 self._go_new_game()
@@ -195,28 +188,6 @@ class MainMenuState:
 
         elif event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
             self._show_saves = False
-
-    def _handle_settings_event(self, event):
-        from src.utils.sound_manager import SoundManager
-        snd = SoundManager.instance()
-
-        if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
-            p = event.pos
-            if self._settings_close.collidepoint(p):
-                self._show_settings = False
-                return
-            for key, minus_r, plus_r in getattr(self, "_vol_btns", []):
-                if minus_r.collidepoint(p):
-                    cur = getattr(snd, f"{key}_vol")
-                    getattr(snd, f"set_{key}")(max(0.0, round(cur - 0.1, 1)))
-                elif plus_r.collidepoint(p):
-                    cur = getattr(snd, f"{key}_vol")
-                    getattr(snd, f"set_{key}")(min(1.0, round(cur + 0.1, 1)))
-            if not self._settings_panel.collidepoint(p):
-                self._show_settings = False
-
-        elif event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
-            self._show_settings = False
 
     def _handle_confirm_event(self, event):
         if event.type == pygame.MOUSEMOTION:
@@ -391,71 +362,7 @@ class MainMenuState:
             if self._confirm_idx is not None:
                 self._draw_confirm_overlay(surface)
 
-        if self._show_settings:
-            self._draw_settings_overlay(surface)
-
-    # ── Settings overlay ──────────────────────────────────────────────────────
-
-    def _draw_settings_overlay(self, surface):
-        from src.utils.sound_manager import SoundManager
-        snd = SoundManager.instance()
-
-        dim = pygame.Surface((SCREEN_W, SCREEN_H), pygame.SRCALPHA)
-        dim.fill((0, 0, 0, 160))
-        surface.blit(dim, (0, 0))
-
-        r = self._settings_panel
-        pygame.draw.rect(surface, C_PANEL,  r, border_radius=10)
-        pygame.draw.rect(surface, C_BORDER, r, 2, border_radius=10)
-
-        title = self.font_btn.render("Audio Settings", True, C_WHITE)
-        surface.blit(title, (r.centerx - title.get_width() // 2, r.y + 14))
-        pygame.draw.line(surface, C_BORDER,
-                         (r.x + 16, r.y + 48), (r.right - 16, r.y + 48))
-
-        vol_rows = [
-            ("master", "Master Volume"),
-            ("sfx",    "Sound Effects"),
-            ("ambient","Ambient"),
-        ]
-        self._vol_btns = []
-        row_y = r.y + 62
-        btn_w, btn_h = 34, 28
-
-        for key, label in vol_rows:
-            val = getattr(snd, f"{key}_vol")
-            ls  = self.font_medium.render(label + ":", True, C_WHITE)
-            surface.blit(ls, (r.x + 20, row_y + 4))
-
-            # Bar
-            bar_x, bar_y, bar_w, bar_h = r.x + 170, row_y + 8, 160, 14
-            pygame.draw.rect(surface, (30, 45, 30), pygame.Rect(bar_x, bar_y, bar_w, bar_h), border_radius=4)
-            fill = int(bar_w * val)
-            if fill > 0:
-                pygame.draw.rect(surface, C_BTN_HOV,
-                                 pygame.Rect(bar_x, bar_y, fill, bar_h), border_radius=4)
-
-            # Percentage
-            pct = self.font_small.render(f"{int(val * 100)}%", True, C_GOLD)
-            surface.blit(pct, (bar_x + bar_w + 8, row_y + 4))
-
-            # - / + buttons
-            minus_r = pygame.Rect(r.x + 340, row_y, btn_w, btn_h)
-            plus_r  = pygame.Rect(r.x + 382, row_y, btn_w, btn_h)
-            for btn_r, lbl in [(minus_r, "−"), (plus_r, "+")]:
-                pygame.draw.rect(surface, C_BTN, btn_r, border_radius=4)
-                pygame.draw.rect(surface, C_BORDER, btn_r, 1, border_radius=4)
-                bl = self.font_medium.render(lbl, True, C_WHITE)
-                surface.blit(bl, bl.get_rect(center=btn_r.center))
-            self._vol_btns.append((key, minus_r, plus_r))
-
-            row_y += 52
-
-        # Close button
-        pygame.draw.rect(surface, C_BTN, self._settings_close, border_radius=6)
-        pygame.draw.rect(surface, C_BORDER, self._settings_close, 1, border_radius=6)
-        cl = self.font_medium.render("Close  (Esc)", True, C_WHITE)
-        surface.blit(cl, cl.get_rect(center=self._settings_close.center))
+        self._audio_panel.draw(surface)
 
     # ── Save panel ────────────────────────────────────────────────────────────
 
