@@ -1,0 +1,180 @@
+GOLF TILESET GUIDE
+==================
+Two files, each 256x192 (or 256x160) px, 16x16 source tiles, 16 columns wide.
+
+How to load in the editor
+--------------------------
+1. Editor -> File -> Import Tileset PNG  -> golf_ground.png   (opaque, ground layer)
+2. Editor -> File -> Import Tileset PNG  -> golf_detail.png   (RGBA, detail layer)
+   Mark golf_detail.png as TRANSPARENT when loading.
+
+Terrain logic codes (used in the Logic layer)
+----------------------------------------------
+  X = Tee Box     F = Fairway     R = Rough       D = Deep Rough
+  B = Bunker      W = Water       T = Trees/OOB   G = Green
+
+=== golf_ground.png  (opaque, use on GROUND layer) ===
+
+Row  0  FAIRWAY
+  Col  0  Plain fairway (main tile - use this most)
+  Col  1  Fairway variant 2 (alternate stripe)
+  Col  2  Fairway variant 3
+  Col  3  Fairway variant 4
+  Col  4  Fairway/Rough edge -- North (rough enters from top)
+  Col  5  Fairway/Rough edge -- South
+  Col  6  Fairway/Rough edge -- West
+  Col  7  Fairway/Rough edge -- East
+  Col  8  Fairway corner -- NW (rough in top-left quadrant)
+  Col  9  Fairway corner -- NE
+  Col 10  Fairway corner -- SE
+  Col 11  Fairway corner -- SW
+  Col 12  Fairway inner corner -- NW
+  Col 13  Fairway inner corner -- NE
+  Col 14  Fairway inner corner -- SE
+  Col 15  Fairway inner corner -- SW
+
+Row  1  ROUGH
+  Col 0-3  Rough plain (4 variants)
+  Col 4-7  Rough/Fairway edges N/S/W/E
+  Col 8-11 Rough/Fairway corners NW/NE/SE/SW
+  Col 12-15 Heavy rough variants
+
+Row  2  GREEN (putting surface)
+  Col 0-3  Green variants (striped, diagonal, plain)
+  Col 4-7  Green/Rough edges N/S/W/E
+  Col 8-11 Green/Rough corners NW/NE/SE/SW
+  Col 12-15 Green/Fairway edges N/S/W/E
+
+Row  3  TEE BOX
+  Col 0    Plain tee
+  Col 1    Tee with tee-peg marker
+  Col 2-3  Tee variants
+  Col 4-7  Tee/Rough edges N/S/W/E
+  Col 8-11 Tee/Rough corners NW/NE/SE/SW
+  Col 12-15 Tee/Fairway edges N/S/W/E
+
+Row  4  BUNKER / SAND
+  Col 0    Flat bunker (main tile)
+  Col 1    Bunker with shadow/depth
+  Col 2-3  Bunker variants
+  Col 4-7  Bunker/Rough edges
+  Col 8-11 Bunker/Rough corners
+  Col 12-15 Bunker/Fairway edges
+
+Row  5  WATER
+  Col 0-3  Water variants (wave frames)
+  Col 4-7  Water/Rough edges
+  Col 8-11 Water/Rough corners
+  Col 12-15 Water/Fairway edges
+
+Row  6  DEEP ROUGH
+  Col 0-3  Deep rough variants
+  Col 4-7  Deep/Rough edges
+  Col 8-11 Deep/Rough corners
+  Col 12-15 Heavy deep rough variants
+
+Row  7  TREES / OOB
+  Col 0-3  Tree variants (dense canopy)
+  Col 4-7  Tree/Rough edges (tree recedes into rough)
+  Col 8-11 Tree/Rough corners
+  Col 12-15 Inner tree corners (rough recedes into trees)
+
+Row  8  CART PATH
+  Col  0  Horizontal path
+  Col  1  Vertical path
+  Col  2  Corner top-left (TL)
+  Col  3  Corner top-right (TR)
+  Col  4  Corner bottom-right (BR)
+  Col  5  Corner bottom-left (BL)
+  Col  6  T-junction (open north)
+  Col  7  T-junction (open east)
+  Col  8  T-junction (open south)
+  Col  9  T-junction (open west)
+  Col 10  Crossroads
+  Col 11  Path end (north)
+  Col 12  Path end (east)
+  Col 13  Path end (south)
+  Col 14  Path end (west)
+  Col 15  Plain path (no edge marks)
+
+Row  9  SURFACES
+  Col 0-3  Wooden bridge planks (horizontal)
+  Col 4-7  Wooden bridge planks (vertical)
+  Col 8-11 Bare dirt / worn ground
+  Col 12-15 Rock / stone ground
+
+Row 10  HAZARD / BOUNDARY
+  Col 0-3  Yellow/black hazard stripes (penalty area boundary)
+  Col 4-7  Deep OOB dark ground
+  Col 8-11 Boundary dark fill
+  Col 12-15 Map edge border (pure dark)
+
+Row 11  SPARE (rough fill, can be repainted)
+
+
+=== golf_detail.png  (RGBA transparent, use on DETAIL layer) ===
+
+Row  0  TREES (individual canopy sprites)
+  Col 0-3  Oak trees (round canopy)
+  Col 4-7  Pine trees (triangular layers)
+  Col 8-11 Mixed tree variants
+  Col 12-15 More tree variants
+
+Row  1  LARGE TREE TOPS (use 2x2 stamp selection)
+  Col 0-7  Large oak tops
+  Col 8-15 Large pine tops
+
+Row  2  PLANTS
+  Col 0-3  Small bushes / shrubs
+  Col 4-7  Double bush clusters
+  Col 8-11 Flower clusters (red, yellow, purple, orange)
+  Col 12-15 Wild grass tufts
+
+Row  3  ROCKS
+  Col 0-3  Small rocks
+  Col 4-7  Medium rocks
+  Col 8-11 Large rocks
+  Col 12-15 Rock clusters (3 rocks)
+
+Row  4  WATER FEATURES
+  Col 0-3  Water lilies (green pad + pink flower)
+  Col 4-7  Water ripples
+  Col 8-11 Foam patches
+  Col 12-15 Reed clusters
+
+Row  5  PIN / FLAG / HOLE
+  Col 0-3  Flag and pole (RED flag) -- place on green for pin marker
+  Col 4-7  Flag and pole (YELLOW flag)
+  Col 8-11 Hole cup (dark circle with rim) -- place at pin position
+  Col 12-15 Distance marker discs (red / blue / green / orange)
+
+Row  6  COURSE MARKERS
+  Col 0-3  Yardage posts (white / red / blue / green)
+  Col 4-7  OOB stakes (white post, red top)
+  Col 8-11 Sprinkler heads
+  Col 12-15 Directional arrow markers
+
+Row  7  SHADOWS / MISC
+  Col 0-3  Small drop shadows (place under trees/objects)
+  Col 4-7  Medium drop shadows
+  Col 8-11 Footprint marks
+  Col 12-15 (blank/spare)
+
+Row  8  LARGE TREE TOPS (extra)
+  Col 0-3  Tall pine/oak extended canopy tops
+
+Row  9  SPARE
+
+
+TIPS
+----
+- Use ground layer tiles to set the terrain coverage for the whole hole.
+- Use detail layer sprites to add trees, rocks, flowers, markers on top.
+- Edge tiles (cols 4-11 in each row) help smooth the boundary between
+  two different terrain types.
+- Set the Logic layer to match the terrain: paint G under the green,
+  F under fairway, etc. The game reads the logic layer for gameplay.
+- The flag + hole cup sprites go on the detail layer at the pin position.
+  The logic layer at that same cell should be G (green).
+- Tee box sprites go on the detail layer at the tee position.
+  The logic layer at that cell should be X (tee box).
