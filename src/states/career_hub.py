@@ -9,6 +9,7 @@ Tabs
   3  Career Stats          — stats table + achievements
 """
 
+import os
 import pygame
 
 from src.golf.club        import CLUB_SETS, CLUB_SET_ORDER
@@ -18,7 +19,27 @@ from src.career.tournament import TOUR_DISPLAY_NAMES, EVENTS_PER_SEASON
 from src.career.staff      import STAFF_TYPES, STAFF_ORDER
 from src.career.sponsorship import get_available_sponsors, is_target_met, progress_label
 from src.constants          import SCREEN_W, SCREEN_H
-from src.ui                  import fonts
+from src.ui                 import fonts
+from src.ui.flags           import draw_flag, FLAG_W, FLAG_H
+
+
+def _load_tab_icon(filename):
+    path = os.path.join("assets", "ui", filename)
+    try:
+        img = pygame.image.load(path).convert_alpha()
+        return pygame.transform.scale(img, (16, 16))
+    except Exception:
+        return None
+
+
+_TAB_ICON_FILES = [
+    "tab_training.png",
+    "tab_staff.png",
+    "tab_sponsors.png",
+    "tab_stats.png",
+]
+# Loaded lazily on first draw so pygame display is guaranteed to be initialised.
+_TAB_ICONS: list = []
 
 CONTENT_X  = 15
 CONTENT_Y  = 106   # below tab bar
@@ -475,6 +496,16 @@ class CareerHubState:
         # ── Title row ─────────────────────────────────────────────────────────
         title = self.font_title.render("Career Hub", True, C_WHITE)
         surface.blit(title, (cx - title.get_width() // 2, 10))
+
+        # Player name + flag — left-aligned, vertically centred on title row
+        name_s = self.font_med.render(p.name, True, (180, 220, 140))
+        flag_h = FLAG_H
+        flag_w = FLAG_W
+        gap    = 6
+        name_y = 10 + (title.get_height() - name_s.get_height()) // 2
+        flag_y = 10 + (title.get_height() - flag_h) // 2
+        draw_flag(surface, p.nationality, CONTENT_X, flag_y, flag_w, flag_h)
+        surface.blit(name_s, (CONTENT_X + flag_w + gap, name_y))
 
         tour_name = TOUR_DISPLAY_NAMES.get(p.tour_level, "Tour")
         event_n   = p.events_this_season + 1
@@ -1148,7 +1179,19 @@ class CareerHubState:
         return [(f"Finish top {threshold} in the season", False)]
 
     def _draw_tab_icon(self, surface, tab_idx: int, x: int, y: int, col):
-        """Tiny pixel-art glyph per tab: equipment, staff, sponsor, stats."""
+        """Draw tab icon: PNG if available, otherwise a pixel-art fallback."""
+        global _TAB_ICONS
+        if not _TAB_ICONS:
+            _TAB_ICONS = [_load_tab_icon(f) for f in _TAB_ICON_FILES]
+
+        icon = _TAB_ICONS[tab_idx] if tab_idx < len(_TAB_ICONS) else None
+        if icon is not None:
+            tinted = icon.copy()
+            tinted.fill((*col, 255), special_flags=pygame.BLEND_RGBA_MULT)
+            surface.blit(tinted, (x, y))
+            return
+
+        # ── Pixel-art fallback ────────────────────────────────────────────────
         if tab_idx == 0:
             # Club crossed with dumbbell — "training + equipment"
             pygame.draw.line(surface, col, (x + 2, y + 14), (x + 14, y + 2), 2)
