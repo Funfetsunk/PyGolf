@@ -324,10 +324,22 @@ class GolfRoundState:
         target_x = clamp(aim_x + result.shape_x + wind_x, 0, world_w - 1)
         target_y = clamp(aim_y + result.shape_y + wind_y, 0, world_h - 1)
 
-        # Roll distance — fraction of shot distance, scaled by landing terrain
+        # Roll distance — fraction of shot distance, scaled by the lie the
+        # ball is being struck from.
         shot_dist_px = math.sqrt((aim_x - self.ball.x) ** 2 +
                                  (aim_y - self.ball.y) ** 2)
         roll_dist_px = shot_dist_px * _ROLL_FRAC.get(terrain, 0.0)
+
+        # Issue #4: the club's listed max distance should be TOTAL (carry +
+        # roll), not carry alone. Pull the aim/landing point back by the
+        # expected roll so the ball ends up at ~the stated yardage after
+        # rolling, rather than overflying by ~18%.
+        if (not is_putt) and roll_dist_px > 0 and shot_dist_px > 0:
+            carry_frac = max(0.1, (shot_dist_px - roll_dist_px) / shot_dist_px)
+            aim_x    = self.ball.x + (aim_x    - self.ball.x) * carry_frac
+            aim_y    = self.ball.y + (aim_y    - self.ball.y) * carry_frac
+            target_x = clamp(aim_x + result.shape_x + wind_x, 0, world_w - 1)
+            target_y = clamp(aim_y + result.shape_y + wind_y, 0, world_h - 1)
 
         self._last_safe_x = self.ball.x
         self._last_safe_y = self.ball.y
@@ -376,7 +388,17 @@ class GolfRoundState:
         # Tree-bounce completed — ball came to rest after bouncing out
         if self._bounce_in_progress and self.ball.state == BallState.AT_REST:
             self._bounce_in_progress = False
+            self._nudge_out_of_trees()
             self._auto_select_club()
+
+        # Regular landing that ended up in trees (e.g. ball rolling into the
+        # tree line, or bounce path that stopped on a tree tile). Fixes #2:
+        # without this the next shot plays from Terrain.TREES penalties
+        # even though visually the ball is at the tree edge.
+        if (self.ball.state == BallState.AT_REST
+                and self._ball_terrain() == Terrain.TREES
+                and not self._bounce_in_progress):
+            self._nudge_out_of_trees()
 
         if self.ball.state == BallState.IN_HOLE:
             self.hole_complete  = True
@@ -448,6 +470,29 @@ class GolfRoundState:
             col < edge_margin or col >= self.hole.cols - edge_margin or
             row < edge_margin or row >= self.hole.rows - edge_margin)
         return "Out of bounds — dropped back" if near_edge else "In the trees — bounced out"
+
+    def _nudge_out_of_trees(self):
+        """If the ball has come to rest on a tree tile, push it outward in a
+        spiral until we find a non-tree tile. Otherwise the next shot is
+        played from TERRAIN.TREES with the full distance/accuracy penalty
+        even when the ball visibly sits at the boundary (Funfetsunk/PyGolf#2)."""
+        if self._ball_terrain() != Terrain.TREES:
+            return
+        step = max(1.0, self.tile_sz * 0.5)
+        world_w, world_h = self.renderer.world_size()
+        # Try expanding rings in 8 directions until we clear the tree tile.
+        dirs = [(1, 0), (-1, 0), (0, 1), (0, -1),
+                (1, 1), (1, -1), (-1, 1), (-1, -1)]
+        for ring in range(1, 16):
+            for dx, dy in dirs:
+                tx = clamp(self.ball.x + dx * step * ring, 1, world_w - 2)
+                ty = clamp(self.ball.y + dy * step * ring, 1, world_h - 2)
+                if self.hole.get_terrain_at_pixel(tx, ty, self.tile_sz) != Terrain.TREES:
+                    self.ball.place(tx, ty)
+                    return
+        # Fallback — drop back to last safe position if we somehow can't find
+        # clear ground within 16 tile-halves (~8 tiles).
+        self.ball.place(self._last_safe_x, self._last_safe_y)
 
     def _do_tree_bounce(self):
         """Launch the ball back from the trees toward safe ground."""
