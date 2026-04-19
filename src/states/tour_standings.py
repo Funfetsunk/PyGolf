@@ -325,17 +325,17 @@ class TourStandingsState:
         if self._season_over:
             info = self._promotion_info or {}
             if self._is_qschool:
-                next_lbl = ("To World Tour  →" if info.get("promoted")
-                            else "Back to Continental Tour  →")
+                next_lbl = ("To World Tour  >" if info.get("promoted")
+                            else "Back to Continental Tour  >")
             elif info.get("qschool_qualified"):
-                next_lbl = "To Q-School Qualifier  →"
+                next_lbl = "To Q-School Qualifier  >"
             elif info.get("promoted"):
-                next_lbl = "Start Next Tour  →"
+                next_lbl = "Start Next Tour  >"
             else:
-                next_lbl = "Start New Season  →"
+                next_lbl = "Start New Season  >"
         else:
             event_n = p.events_this_season + 1
-            next_lbl = f"Play Event {event_n}  →"
+            next_lbl = f"Play Event {event_n}  >"
 
         next_bg = C_BTN_HOV if self._btn_hov == "next" else C_BTN
         pygame.draw.rect(surface, next_bg, self._btn_next, border_radius=8)

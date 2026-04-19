@@ -158,7 +158,7 @@ class TournamentResultsState:
         bg = C_BTN_HOV if self._btn_hov else C_BTN
         pygame.draw.rect(surface, bg, self._btn, border_radius=8)
         pygame.draw.rect(surface, C_GREEN, self._btn, 2, border_radius=8)
-        lbl = self.font_medium.render("Season Standings  →", True, C_WHITE)
+        lbl = self.font_medium.render("Season Standings  >", True, C_WHITE)
         surface.blit(lbl, lbl.get_rect(center=self._btn.center))
 
         # Scroll hint

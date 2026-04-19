@@ -186,8 +186,7 @@ class MainMenuState:
             elif released == "try":
                 self._open_course_picker()
             elif released == "quit":
-                pygame.quit()
-                sys.exit()
+                self._quit_game()
 
         elif event.type == pygame.KEYDOWN:
             if event.key == pygame.K_n:
@@ -195,8 +194,7 @@ class MainMenuState:
             elif event.key == pygame.K_t:
                 self._open_course_picker()
             elif event.key == pygame.K_ESCAPE:
-                pygame.quit()
-                sys.exit()
+                self._quit_game()
 
     def _handle_save_panel_event(self, event):
         if event.type == pygame.MOUSEMOTION:
@@ -324,6 +322,16 @@ class MainMenuState:
         except Exception as e:
             print(f"Resume failed: {e}")
             return False
+
+    def _quit_game(self):
+        """Request a clean shutdown.
+
+        Posts a pygame QUIT event instead of calling sys.exit() directly so
+        main.py's async loop can tear down pygame and (on desktop) sys.exit
+        in the right order. On the browser, SystemExit inside the async loop
+        leaves a dead canvas; this path is a clean stop instead.
+        """
+        pygame.event.post(pygame.event.Event(pygame.QUIT))
 
     def _delete_save(self, idx: int):
         """Delete the save file at index idx, then refresh the list."""
@@ -528,7 +536,7 @@ class MainMenuState:
         surface.blit(title, (r.centerx - title.get_width() // 2, r.y + 14))
 
         hint = self.font_small.render(
-            "Click a row to load  •  ✕ to delete", True, C_GRAY)
+            "Click a row to load  -  X to delete", True, C_GRAY)
         surface.blit(hint, (r.centerx - hint.get_width() // 2, r.y + 44))
 
         pygame.draw.line(surface, C_BORDER,
@@ -586,7 +594,7 @@ class MainMenuState:
             del_bord = C_RED_HOV if del_hov else C_RED
             pygame.draw.rect(surface, del_bg,   delbtn, border_radius=5)
             pygame.draw.rect(surface, del_bord, delbtn, 1, border_radius=5)
-            x_lbl = self.font_medium.render("✕", True,
+            x_lbl = self.font_medium.render("X", True,
                                             C_WHITE if del_hov else (180, 100, 100))
             surface.blit(x_lbl, x_lbl.get_rect(center=delbtn.center))
 

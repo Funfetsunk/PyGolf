@@ -232,7 +232,8 @@ class MenuBackground:
             h = rng.choice([1, 1, 2, 2, 3])
             col = GRASS_TUFT_H if rng.random() < 0.35 else GRASS_TUFT
             for dy in range(h):
-                surf.set_at((x + rng.choice([-1, 0, 0, 1]), _IH - 1 - dy), col)
+                px = max(0, min(_IW - 1, x + rng.choice([-1, 0, 0, 1])))
+                surf.set_at((px, _IH - 1 - dy), col)
 
     # ── Dim band ─────────────────────────────────────────────────────────────
 

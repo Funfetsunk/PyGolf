@@ -64,4 +64,4 @@ def draw_button(
 
 
 def _darken(rgb, f: float):
-    return (int(rgb[0] * f), int(rgb[1] * f), int(rgb[2] * f))
+    return tuple(int(rgb[i] * f) for i in range(3)) + tuple(rgb[3:])

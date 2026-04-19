@@ -9,7 +9,6 @@ Tabs
   3  Career Stats          — stats table + achievements
 """
 
-import os
 import pygame
 
 from src.golf.club        import CLUB_SETS, CLUB_SET_ORDER
@@ -19,23 +18,6 @@ from src.career.tournament import TOUR_DISPLAY_NAMES, EVENTS_PER_SEASON
 from src.career.staff      import STAFF_TYPES, STAFF_ORDER
 from src.career.sponsorship import get_available_sponsors, is_target_met, progress_label
 from src.constants          import SCREEN_W, SCREEN_H
-
-def _load_tab_icon(filename):
-    path = os.path.join("assets", "ui", filename)
-    try:
-        img = pygame.image.load(path).convert_alpha()
-        return pygame.transform.scale(img, (16, 16))
-    except Exception:
-        return None
-
-_TAB_ICON_FILES = [
-    "tab_training.png",
-    "tab_staff.png",
-    "tab_sponsors.png",
-    "tab_stats.png",
-]
-# Loaded lazily on first draw so pygame display is guaranteed to be initialised.
-_TAB_ICONS: list = []
 
 CONTENT_X  = 15
 CONTENT_Y  = 106   # below tab bar
@@ -532,9 +514,9 @@ class CareerHubState:
         pygame.draw.rect(surface, bg, self._btn_play, border_radius=4)
         pygame.draw.rect(surface, C_GREEN, self._btn_play, 1, border_radius=4)
         if p.qschool_pending:
-            play_label = "Play Q-School  →"
+            play_label = "Play Q-School  >"
         else:
-            play_label = f"Play Event {event_n}  →"
+            play_label = f"Play Event {event_n}  >"
         pl = self.font_hdr.render(play_label, True, C_WHITE)
         surface.blit(pl, pl.get_rect(center=self._btn_play.center))
 
@@ -1165,19 +1147,7 @@ class CareerHubState:
         return [(f"Finish top {threshold} in the season", False)]
 
     def _draw_tab_icon(self, surface, tab_idx: int, x: int, y: int, col):
-        """Draw tab icon: PNG if available, otherwise a pixel-art fallback."""
-        global _TAB_ICONS
-        if not _TAB_ICONS:
-            _TAB_ICONS = [_load_tab_icon(f) for f in _TAB_ICON_FILES]
-
-        icon = _TAB_ICONS[tab_idx] if tab_idx < len(_TAB_ICONS) else None
-        if icon is not None:
-            tinted = icon.copy()
-            tinted.fill((*col, 255), special_flags=pygame.BLEND_RGBA_MULT)
-            surface.blit(tinted, (x, y))
-            return
-
-        # ── Pixel-art fallback ────────────────────────────────────────────────
+        """Tiny pixel-art glyph per tab: equipment, staff, sponsor, stats."""
         if tab_idx == 0:
             # Club crossed with dumbbell — "training + equipment"
             pygame.draw.line(surface, col, (x + 2, y + 14), (x + 14, y + 2), 2)
