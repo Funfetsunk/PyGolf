@@ -182,10 +182,10 @@ pygbag --build main.py
 Upload the contents of `build/web/` to any static host (GitHub Pages, Netlify, Cloudflare Pages, …) and share the URL. Players tap **Add to Home Screen** in the browser menu to get an app-style launcher.
 
 **Tips for the best phone experience**
-- **Rotate to landscape.** The game targets 1280×720; in portrait you'll see a letterbox.
+- **Rotate to landscape.** The game targets 1280×720 and will show a "rotate your phone" prompt in portrait; after your first tap it will also request fullscreen and try to pin the orientation.
 - **Tap the ball, then drag.** The tap zone around the ball is enlarged for fingertips (no need to hit the pixel exactly).
 - **Audio unlocks on first tap.** Browsers won't start audio until the user interacts — you'll hear the first swing but the ambient track may only kick in on the next hole.
-- **Saves live in browser storage.** Clearing the site's data in browser settings will wipe career progress, so don't do that mid-season.
+- **Career saves live in browser localStorage**, so they persist across sessions. Clearing the site's data in browser settings will wipe career progress — don't do that mid-season.
 
 ---
 
