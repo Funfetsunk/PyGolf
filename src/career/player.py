@@ -3,6 +3,7 @@ Player — the human golfer's profile, stats, inventory, and career history.
 """
 
 from src.golf.club         import STARTER_BAG, get_club_bag, CLUB_SETS, CLUB_SET_ORDER
+from src.golf.ball_types   import BALL_TYPES, BALL_ORDER
 from src.career.staff       import STAFF_TYPES
 from src.career.sponsorship import is_target_met
 from src.career.majors      import MAJOR_ORDER
@@ -56,6 +57,10 @@ class Player:
         self.stats = {k: BASE_STAT for k in STAT_KEYS}
 
         self.club_set_name = "starter"
+
+        # Balls: owned set + active choice. Range ball is the freebie.
+        self.owned_balls: list[str] = ["range"]
+        self.ball_type:   str       = "range"
 
         # Season tracking
         self.season_points:       int  = 0
@@ -147,6 +152,29 @@ class Player:
         if self.spend_money(info["cost"]):
             self.club_set_name = set_name
             self._check_achievements()
+            return True
+        return False
+
+    # ── Balls ─────────────────────────────────────────────────────────────────
+
+    def buy_ball(self, ball_id: str) -> bool:
+        """Buy a ball type. Returns True on success. Auto-selects the new ball."""
+        info = BALL_TYPES.get(ball_id)
+        if info is None:
+            return False
+        if ball_id in self.owned_balls:
+            return False
+        if info["min_tour"] > self.tour_level:
+            return False
+        if not self.spend_money(info["cost"]):
+            return False
+        self.owned_balls.append(ball_id)
+        self.ball_type = ball_id
+        return True
+
+    def select_ball(self, ball_id: str) -> bool:
+        if ball_id in self.owned_balls:
+            self.ball_type = ball_id
             return True
         return False
 
@@ -324,6 +352,8 @@ class Player:
             "qschool_pending":              self.qschool_pending,
             "qschool_attempts_remaining":   self.qschool_attempts_remaining,
             "tutorial_seen":                self.tutorial_seen,
+            "owned_balls":                  list(self.owned_balls),
+            "ball_type":                    self.ball_type,
         }
 
     @classmethod
@@ -356,4 +386,8 @@ class Player:
         p.qschool_pending              = data.get("qschool_pending", False)
         p.qschool_attempts_remaining   = data.get("qschool_attempts_remaining", 0)
         p.tutorial_seen                = data.get("tutorial_seen", False)
+        p.owned_balls                  = data.get("owned_balls", ["range"]) or ["range"]
+        p.ball_type                    = data.get("ball_type", "range")
+        if p.ball_type not in p.owned_balls:
+            p.ball_type = "range"
         return p

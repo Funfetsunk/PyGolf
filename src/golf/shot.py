@@ -135,10 +135,11 @@ class ShotController:
         perp_x = -dir_y   # perpendicular left
         perp_y =  dir_x
         shape_offset_px = 0.0
+        shape_frac = SHAPE_CURVE_FRACTION * getattr(club, "shape_mult", 1.0)
         if self.shot_shape == ShotShape.DRAW and club.can_shape:
-            shape_offset_px = -shot_dist_px * SHAPE_CURVE_FRACTION   # left curve
+            shape_offset_px = -shot_dist_px * shape_frac   # left curve
         elif self.shot_shape == ShotShape.FADE and club.can_shape:
-            shape_offset_px =  shot_dist_px * SHAPE_CURVE_FRACTION   # right curve
+            shape_offset_px =  shot_dist_px * shape_frac   # right curve
 
         # Effective accuracy — putter degrades with distance; other clubs use terrain mod
         if club.name == "Putter":

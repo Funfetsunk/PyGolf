@@ -169,10 +169,12 @@ class GolfRoundState:
     def _effective_club(self):
         """Return a Club copy with stats scaled by player attributes + staff bonuses."""
         from src.golf.club import Club
+        from src.golf.ball_types import get_ball
         club   = self.current_club
         player = self.game.player
         if player is None:
             return club
+        ball = get_ball(getattr(player, "ball_type", "range"))
 
         def eff(key):
             return player.stats.get(key, 50) + player.staff_stat_bonus(key)
@@ -187,8 +189,15 @@ class GolfRoundState:
         else:
             acc_bonus = (eff("accuracy") - 50) / 500.0
 
-        new_dist = club.max_distance_yards * power_mult
-        new_acc  = club.accuracy + acc_bonus
+        # Ball effects: distance multiplier + club-class accuracy add-ons
+        new_dist = club.max_distance_yards * power_mult * ball["dist_mult"]
+        if club.name == "Putter":
+            ball_acc = ball["putt_acc_add"]
+        elif club.name in ("Pitching Wedge", "Sand Wedge"):
+            ball_acc = ball["short_acc_add"]
+        else:
+            ball_acc = ball["acc_add"]
+        new_acc  = club.accuracy + acc_bonus + ball_acc
 
         # B2-6: Fitness → late-round fatigue (kicks in after hole 12)
         if self.hole_index >= 12:
@@ -209,7 +218,9 @@ class GolfRoundState:
             except Exception:
                 pass
 
-        return Club(club.name, new_dist, min(0.99, new_acc), club.can_shape)
+        effective = Club(club.name, new_dist, min(0.99, new_acc), club.can_shape)
+        effective.shape_mult = ball["shape_mult"]
+        return effective
 
     # ── Event handling ────────────────────────────────────────────────────────
 

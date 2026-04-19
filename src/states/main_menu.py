@@ -40,6 +40,7 @@ C_RED_HOV    = (230,  80,  80)
 C_RED_DIM    = ( 80,  24,  24)
 
 from src.constants import SCREEN_W, SCREEN_H
+from src.ui.menu_background import MenuBackground
 
 TOUR_NAMES = {
     1: "Amateur Circuit",
@@ -62,6 +63,8 @@ class MainMenuState:
         self.font_btn    = pygame.font.SysFont("arial", 24, bold=True)
         self.font_medium = pygame.font.SysFont("arial", 18)
         self.font_small  = pygame.font.SysFont("arial", 14)
+
+        self._bg = MenuBackground(SCREEN_W, SCREEN_H)
 
         self._saves    = list_saves()
         self._previews = [get_save_preview(p) for p in self._saves[:5]]
@@ -406,6 +409,7 @@ class MainMenuState:
     # ── Update ────────────────────────────────────────────────────────────────
 
     def update(self, dt):
+        self._bg.update(dt)
         if self._load_error_timer > 0:
             self._load_error_timer = max(0.0, self._load_error_timer - dt)
             if self._load_error_timer == 0.0:
@@ -414,7 +418,7 @@ class MainMenuState:
     # ── Draw ──────────────────────────────────────────────────────────────────
 
     def draw(self, surface):
-        surface.fill(C_BG)
+        self._bg.draw(surface)
         cx = SCREEN_W // 2
 
         title = self.font_title.render("Let's Golf!", True, C_TITLE)
@@ -449,11 +453,14 @@ class MainMenuState:
                 f"Last: {info['name']}  •  {tour}  •  "
                 f"{info.get('events_played', 0)} events played",
                 True, (90, 140, 70))
-        surface.blit(hint, (cx - hint.get_width() // 2, self._btn_load.bottom + 6))
+        surface.blit(hint, (cx - hint.get_width() // 2, self._btn_new.top - 22))
 
-        ctrl = self.font_small.render(
-            "N = New Game   •   Esc = Quit", True, (55, 75, 55))
-        surface.blit(ctrl, (cx - ctrl.get_width() // 2, SCREEN_H - 30))
+        ctrl_text = "N = New Game   •   Esc = Quit"
+        ctrl_shadow = self.font_small.render(ctrl_text, True, (0, 0, 0))
+        ctrl       = self.font_small.render(ctrl_text, True, (210, 230, 190))
+        cx_ctrl = cx - ctrl.get_width() // 2
+        surface.blit(ctrl_shadow, (cx_ctrl + 1, SCREEN_H - 29))
+        surface.blit(ctrl,        (cx_ctrl,     SCREEN_H - 30))
 
         # Settings button
         sg_bg = C_BTN_HOV if self._hovered_settings else C_BTN

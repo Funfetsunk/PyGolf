@@ -12,6 +12,7 @@ Tabs
 import pygame
 
 from src.golf.club        import CLUB_SETS, CLUB_SET_ORDER
+from src.golf.ball_types  import BALL_TYPES, BALL_ORDER, effect_summary as ball_effect_summary
 from src.career.player    import STAT_KEYS, BASE_STAT, MAX_STAT, ACHIEVEMENTS
 from src.career.tournament import TOUR_DISPLAY_NAMES, EVENTS_PER_SEASON
 from src.career.staff      import STAFF_TYPES, STAFF_ORDER
@@ -117,15 +118,25 @@ class CareerHubState:
             self._train_btns.append((key, r))
             btn_y += 76
 
-        # Equipment panel (right)
+        # Equipment panel (right): clubs (compact) + balls stacked below
         self._equip_panel = pygame.Rect(SCREEN_W - CONTENT_X - 390, ty, 390, CONTENT_H)
         self._equip_btns: list[tuple[str, pygame.Rect]] = []
-        ey = ty + 46
+        ey = ty + 40
         for set_name in CLUB_SET_ORDER[1:]:
             ex = self._equip_panel.x
-            r  = pygame.Rect(ex + 295, ey + 2, 84, 26)
+            r  = pygame.Rect(ex + 295, ey + 4, 84, 24)
             self._equip_btns.append((set_name, r))
-            ey += 76
+            ey += 48
+
+        # Balls section starts after clubs + small header gap
+        self._balls_section_y = ey + 24
+        self._ball_btns: list[tuple[str, pygame.Rect]] = []
+        by = self._balls_section_y + 22
+        for ball_id in BALL_ORDER:
+            ex = self._equip_panel.x
+            r  = pygame.Rect(ex + 295, by + 4, 84, 24)
+            self._ball_btns.append((ball_id, r))
+            by += 34
 
         # Event info panel (centre)
         cx = CONTENT_X + 390 + 10
@@ -177,6 +188,10 @@ class CareerHubState:
                 self._do_train(hit[6:])
             elif hit.startswith("buy:"):
                 self._do_buy(hit[4:])
+            elif hit.startswith("ball_buy:"):
+                self._do_ball_buy(hit[len("ball_buy:"):])
+            elif hit.startswith("ball_select:"):
+                self._do_ball_select(hit[len("ball_select:"):])
             elif hit.startswith("hire:"):
                 self._do_hire(hit[5:])
             elif hit.startswith("fire:"):
@@ -206,6 +221,10 @@ class CareerHubState:
             for sn, r in self._equip_btns:
                 if r.collidepoint(pos):
                     return f"buy:{sn}"
+            for bid, r in self._ball_btns:
+                if r.collidepoint(pos):
+                    owned = bid in self.player.owned_balls
+                    return f"ball_select:{bid}" if owned else f"ball_buy:{bid}"
         elif self._tab == 1:
             for sid, r in self._staff_btn:
                 if r.collidepoint(pos):
@@ -255,6 +274,25 @@ class CareerHubState:
         p.upgrade_club_set(set_name)
         self._flash(f"Purchased {info['label']}!")
         self._pop_new_achievements()
+
+    def _do_ball_buy(self, ball_id):
+        p    = self.player
+        info = BALL_TYPES.get(ball_id)
+        if not info:
+            return
+        if info["min_tour"] > p.tour_level:
+            self._flash(f"Requires Tour Level {info['min_tour']}")
+            return
+        if p.money < info["cost"]:
+            self._flash(f"Need ${info['cost']:,} for {info['label']}")
+            return
+        if p.buy_ball(ball_id):
+            self._flash(f"Bought {info['label']}! Now in play.")
+
+    def _do_ball_select(self, ball_id):
+        info = BALL_TYPES.get(ball_id, {})
+        if self.player.select_ball(ball_id):
+            self._flash(f"Switched to {info.get('label', ball_id)}.")
 
     def _do_hire(self, sid):
         p    = self.player
@@ -658,7 +696,7 @@ class CareerHubState:
         self._section_hdr(surface, "EQUIPMENT", r.x, r.y, r.width)
 
         cur_idx = CLUB_SET_ORDER.index(p.club_set_name)
-        ey = r.y + 46
+        ey = r.y + 40
 
         for (set_name, btn_r) in self._equip_btns:
             info    = CLUB_SETS[set_name]
@@ -677,14 +715,12 @@ class CareerHubState:
                 sub, sc = "Owned", C_GREEN
             elif locked:
                 tour_name = TOUR_DISPLAY_NAMES.get(info['min_tour'], "next tour")
-                sub, sc = f"Unlocks on {tour_name} (Tour {info['min_tour']})", C_RED
+                sub, sc = f"Unlocks on {tour_name} (T{info['min_tour']})", C_RED
             else:
-                sub, sc = f"${info['cost']:,}", C_GOLD if can_buy else C_GRAY
+                sub, sc = f"${info['cost']:,}  ·  {self._driver_hint(set_name)}", (
+                    C_GOLD if can_buy else C_GRAY)
             ss = self.font_small.render(sub, True, sc)
             surface.blit(ss, (r.x + 10, ey + 20))
-
-            hs = self.font_small.render(self._driver_hint(set_name), True, (75, 115, 75))
-            surface.blit(hs, (r.x + 10, ey + 36))
 
             # Buy button
             hk = f"buy:{set_name}"
@@ -697,7 +733,60 @@ class CareerHubState:
             bl = self.font_small.render(bt, True,
                                         C_GREEN if owned else C_GRAY if locked else C_WHITE)
             surface.blit(bl, bl.get_rect(center=btn_r.center))
-            ey += 76
+            ey += 48
+
+        # ── Balls section ─────────────────────────────────────────────────────
+        by = self._balls_section_y
+        pygame.draw.line(surface, C_BORDER,
+                         (r.x + 10, by - 6), (r.right - 10, by - 6), 1)
+        hdr = self.font_hdr.render("BALLS", True, C_GOLD)
+        surface.blit(hdr, (r.x + 12, by))
+        by += 22
+
+        for (ball_id, btn_r) in self._ball_btns:
+            info   = BALL_TYPES[ball_id]
+            owned  = ball_id in p.owned_balls
+            active = (p.ball_type == ball_id)
+            locked = info["min_tour"] > p.tour_level and not owned
+            can_buy = (not owned) and (not locked) and p.money >= info["cost"]
+
+            col = C_GOLD if active else (C_GRAY if locked else C_WHITE)
+            name_str = info["label"] + ("  [active]" if active else "")
+            ls = self.font_med.render(name_str, True, col)
+            surface.blit(ls, (r.x + 10, by))
+
+            if owned and not active:
+                sub, sc = ball_effect_summary(ball_id), C_GRAY
+            elif active:
+                sub, sc = ball_effect_summary(ball_id), C_GREEN
+            elif locked:
+                sub, sc = f"Unlocks Tour {info['min_tour']}", C_RED
+            else:
+                sub, sc = f"${info['cost']:,}  ·  {ball_effect_summary(ball_id)}", (
+                    C_GOLD if can_buy else C_GRAY)
+            ss = self.font_small.render(sub, True, sc)
+            surface.blit(ss, (r.x + 10, by + 18))
+
+            # Buy / Select button
+            if owned:
+                hk = f"ball_select:{ball_id}"
+                if active:
+                    bg, bt, tc = C_BTN_DIS, "Active", C_GREEN
+                else:
+                    bg = C_BTN_HOV if self._hov == hk else C_BTN
+                    bt, tc = "Select", C_WHITE
+            elif locked:
+                bg, bt, tc = C_BTN_DIS, "Locked", C_GRAY
+            else:
+                hk = f"ball_buy:{ball_id}"
+                bg = (C_BTN_HOV if self._hov == hk
+                      else (C_BTN if can_buy else C_BTN_DIS))
+                bt, tc = "Buy", (C_WHITE if can_buy else C_GRAY)
+            pygame.draw.rect(surface, bg, btn_r, border_radius=4)
+            pygame.draw.rect(surface, C_BORDER, btn_r, 1, border_radius=4)
+            bl = self.font_small.render(bt, True, tc)
+            surface.blit(bl, bl.get_rect(center=btn_r.center))
+            by += 34
 
     # ── Tab 1 — Staff ─────────────────────────────────────────────────────────
 
