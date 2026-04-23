@@ -2,8 +2,10 @@
 sponsorship.py — sponsor deal definitions and progress helpers.
 
 One sponsor contract may be active at a time.  The signing fee is paid
-immediately on acceptance; the season bonus is paid at season reset if the
-performance target was met.  Contracts expire after one season.
+immediately on acceptance; the season bonus is paid as soon as the
+performance target is met (the contract then clears so the player can sign
+another).  Any contract still active at season reset expires without
+payout.
 """
 
 # Target types:  "top10" | "top5" | "win" | "played"
