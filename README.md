@@ -8,8 +8,8 @@ A top-down 2D pixel art golf career game built in Python. Work your way up from 
 
 ```bash
 # 1. Clone the repo
-git clone https://github.com/your-username/Golf.git
-cd Golf
+git clone https://github.com/Funfetsunk/PyGolf.git
+cd PyGolf
 
 # 2. Install the one dependency
 pip install pygame-ce
@@ -57,9 +57,9 @@ The game is entirely mouse-driven and plays out in top-down 2D with tile-based c
 | Terrain | Distance | Accuracy |
 |---|---|---|
 | Tee / Fairway | Full | Full |
-| Rough | −25% | −20% |
-| Deep Rough | −45% | −40% |
-| Bunker | −40% | −30% |
+| Rough | −25% | −30% |
+| Deep Rough | −45% | −50% |
+| Bunker | −40% | −22% |
 | Trees | −60% | −70% |
 | Water | Penalty + drop | — |
 
@@ -87,7 +87,7 @@ Six tour levels, each with its own schedule, courses, prize fund, and AI field:
 ### Between Rounds — Career Hub
 
 - **Training** — spend prize money to raise any of your 6 stats (Power, Accuracy, Short Game, Putting, Mental, Fitness). Each stat directly affects your shots in play.
-- **Equipment** — upgrade your club set through 5 tiers, unlocked as you reach higher tours
+- **Equipment** — upgrade your club set through 6 tiers (Starter → Professional), unlocked as you reach higher tours
 - **Staff** *(Continental Tour and above)* — hire a Coach, Caddie, Sports Psychologist, or Fitness Trainer, each giving permanent stat bonuses
 - **Sponsors** *(Continental Tour and above)* — sign deals for a signing fee and a season bonus if you hit a performance target (top-5 finishes, wins, etc.)
 - **Career Stats** — full career history, achievements, world ranking, majors won
@@ -118,7 +118,7 @@ The game auto-saves after every round. Multiple save slots are supported; load a
 ## Project Structure
 
 ```
-Golf/
+PyGolf/
 ├── main.py              ← run this to play
 ├── editor.py            ← course editor (developer tool)
 ├── requirements.txt
