@@ -14,8 +14,9 @@ thin wrapper over process_tournament_result().
 
 from __future__ import annotations
 
-from src.career.rankings import get_ranking_points, compute_world_rank
-from src.career.staff    import STAFF_TYPES
+from src.career.rankings    import get_ranking_points, compute_world_rank
+from src.career.staff        import STAFF_TYPES
+from src.career.sponsorship  import is_target_met
 
 
 def process_tournament_result(player, tournament) -> dict:
@@ -63,7 +64,10 @@ def process_tournament_result(player, tournament) -> dict:
     player.world_ranking_points += rp
     player.world_rank = compute_world_rank(player.world_ranking_points)
 
-    # Sponsor target progress
+    # Sponsor target progress. If the target is met, pay the season bonus
+    # immediately and clear the contract — waiting for season end left players
+    # unable to collect once the target was visibly achieved (issue #5).
+    sponsor_bonus = 0
     if player.active_sponsor and not is_qschool:
         t_type = player.active_sponsor["target"]["type"]
         inc = False
@@ -74,6 +78,12 @@ def process_tournament_result(player, tournament) -> dict:
         if inc:
             player.sponsor_progress[t_type] = (
                 player.sponsor_progress.get(t_type, 0) + 1)
+        if is_target_met(player.active_sponsor, player.sponsor_progress):
+            sponsor_bonus = player.active_sponsor["season_bonus"]
+            player.earn_money(sponsor_bonus)
+            player.total_earnings += sponsor_bonus
+            player.active_sponsor   = None
+            player.sponsor_progress = {}
 
     # Deduct staff salaries
     for sid in player.hired_staff:
@@ -81,7 +91,8 @@ def process_tournament_result(player, tournament) -> dict:
         player.spend_money(salary)
 
     player._check_achievements()
-    return {"position": position, "prize": prize, "points": pts}
+    return {"position": position, "prize": prize, "points": pts,
+            "sponsor_bonus": sponsor_bonus}
 
 
 class CareerService:

@@ -156,6 +156,12 @@ class TournamentResultsState:
         banner = self.font_large.render(banner_txt, True, C_GOLD)
         surface.blit(banner, (cx - banner.get_width() // 2, 88))
 
+        sponsor_bonus = r.get("sponsor_bonus", 0)
+        if sponsor_bonus > 0:
+            sb_txt = f"Sponsor bonus: +${sponsor_bonus:,}  (contract complete)"
+            sb = self.font_medium.render(sb_txt, True, C_GREEN)
+            surface.blit(sb, (cx - sb.get_width() // 2, 118))
+
         # ── Leaderboard table ─────────────────────────────────────────────────
         self._draw_table(surface)
 
