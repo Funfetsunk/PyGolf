@@ -213,11 +213,21 @@ class RoundSummaryState:
             surface.blit(ctx, (cx - ctx.get_width() // 2, 90))
 
         # ── This round's score ────────────────────────────────────────────────
-        score_color = (_vs_par_color(total_diff))
-        score_txt   = self.font_large.render(
-            f"Round score:  {self._total_strokes}  ({diff_str})  •  Par {self.course.par}",
-            True, score_color)
         offset_y = 122
+        is_sford = t is not None and getattr(t, "format", "stroke") == "stableford"
+        if is_sford:
+            from src.career.tournament import Tournament as _T
+            round_pts = sum(
+                _T.stableford_points(self.scores[i] - self.course.get_hole(i).par)
+                for i in range(len(self.scores)))
+            score_txt = self.font_large.render(
+                f"Round score:  {round_pts} pts  ({self._total_strokes} strokes, {diff_str})",
+                True, C_GOLD)
+        else:
+            score_color = _vs_par_color(total_diff)
+            score_txt   = self.font_large.render(
+                f"Round score:  {self._total_strokes}  ({diff_str})  •  Par {self.course.par}",
+                True, score_color)
         surface.blit(score_txt, (cx - score_txt.get_width() // 2, offset_y))
 
         desc, desc_color = _round_description(total_diff)
@@ -227,7 +237,10 @@ class RoundSummaryState:
         # ── Main content: leaderboard (tournament) or scorecard (free play) ───
         content_y = offset_y + 72
         if t is not None:
-            self._draw_leaderboard(surface, t, content_y)
+            if getattr(t, "format", "stroke") == "stableford":
+                self._draw_stableford_leaderboard(surface, t, content_y)
+            else:
+                self._draw_leaderboard(surface, t, content_y)
         else:
             self._draw_scorecard_section(surface, content_y)
 
@@ -344,6 +357,69 @@ class RoundSummaryState:
 
             player_row_y = sep_y + 14
             draw_row(player_row_y, player_pos, player_entry, True)
+
+    # ── Stableford leaderboard ────────────────────────────────────────────────
+
+    def _draw_stableford_leaderboard(self, surface, tournament, top_y):
+        lb        = tournament.get_stableford_final_leaderboard()
+        top10     = lb[:10]
+        player_entry = next((e for e in lb if e["is_player"]), None)
+        player_pos   = next((i + 1 for i, e in enumerate(lb) if e["is_player"]), None)
+        player_in_top10 = player_pos is not None and player_pos <= 10
+
+        tw = 860
+        tx = SCREEN_W // 2 - tw // 2
+        cx = SCREEN_W // 2
+
+        rounds_done = len(tournament.player_rounds)
+        col_pos   = tx
+        col_name  = tx + 48
+        col_rds   = col_name + 220
+        rd_w      = 68
+        col_total = col_rds + rounds_done * rd_w + 12
+
+        pygame.draw.rect(surface, C_HDR,
+                         pygame.Rect(tx, top_y, tw, 24), border_radius=4)
+        surface.blit(self.font_lb_hdr.render("Pos",   True, (150, 200, 120)),
+                     (col_pos  + 4, top_y + 4))
+        surface.blit(self.font_lb_hdr.render("Player", True, (150, 200, 120)),
+                     (col_name + 4, top_y + 4))
+        for r in range(rounds_done):
+            surface.blit(self.font_lb_hdr.render(f"Rd {r+1} Pts", True, (150, 200, 120)),
+                         (col_rds + r * rd_w + 4, top_y + 4))
+        surface.blit(self.font_lb_hdr.render("Total Pts", True, (150, 200, 120)),
+                     (col_total + 4, top_y + 4))
+
+        def draw_row(row_y, pos, entry, is_player):
+            if is_player:
+                pygame.draw.rect(surface, C_PLAYER_BG,
+                                 pygame.Rect(tx, row_y, tw, LB_ROW_H - 2), border_radius=2)
+                pygame.draw.rect(surface, C_PLAYER_BD,
+                                 pygame.Rect(tx, row_y, tw, LB_ROW_H - 2), 1, border_radius=2)
+            elif pos % 2 == 0:
+                pygame.draw.rect(surface, (16, 24, 16),
+                                 pygame.Rect(tx, row_y, tw, LB_ROW_H - 2))
+            tc = C_WHITE if is_player else (200, 210, 200)
+            surface.blit(self.font_lb.render(str(pos), True, tc), (col_pos + 4, row_y + 6))
+            name_str = ("★ " + entry["name"]) if is_player else entry["name"]
+            surface.blit(self.font_lb.render(name_str, True, tc), (col_name + 4, row_y + 6))
+            for ri, rnd_pts in enumerate(entry["rounds"]):
+                surface.blit(self.font_lb.render(str(rnd_pts), True, tc),
+                             (col_rds + ri * rd_w + 4, row_y + 6))
+            total_c = C_GOLD if is_player else (190, 190, 190)
+            surface.blit(self.font_lb.render(str(entry["total"]), True, total_c),
+                         (col_total + 4, row_y + 6))
+
+        for i, entry in enumerate(top10):
+            draw_row(top_y + 24 + i * LB_ROW_H, i + 1, entry, entry["is_player"])
+
+        if not player_in_top10 and player_entry is not None:
+            sep_y = top_y + 24 + 10 * LB_ROW_H + 4
+            for x in range(tx, tx + tw, 8):
+                pygame.draw.line(surface, (60, 80, 60), (x, sep_y + 2), (x + 4, sep_y + 2))
+            ellipsis = self.font_lb_hdr.render("· · ·", True, C_GRAY)
+            surface.blit(ellipsis, (cx - ellipsis.get_width() // 2, sep_y - 2))
+            draw_row(sep_y + 14, player_pos, player_entry, True)
 
     # ── Scorecard section (free-play mode) ────────────────────────────────────
 

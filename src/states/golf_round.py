@@ -99,10 +99,41 @@ class GolfRoundState:
         self.font_big = fonts.heading(40)
         self.font_med = fonts.body(22)
 
+        # ── Course conditions (Phase 1) ───────────────────────────────────────
+        _t = game.current_tournament
+        if _t is not None and _t.pin_positions:
+            _t.apply_pin_positions(course)
+
+        # Pre-extract conditions dict for HUD and draw methods.
+        if _t is not None:
+            from src.career.tournament import FIRMNESS, WEATHER_TYPES
+            self._conditions = {
+                "pin":         (_t.pin_positions[hole_index]
+                                if _t.pin_positions and hole_index < len(_t.pin_positions)
+                                else "standard"),
+                "green_speed": getattr(_t, "green_speed", "normal"),
+                "firmness":    getattr(_t, "firmness",    "normal"),
+                "weather":     getattr(_t, "weather",     "clear"),
+                "format":      getattr(_t, "format",      "stroke"),
+            }
+            # Firmness + weather roll modifier (additive, clamped)
+            _roll_mod = FIRMNESS.get(self._conditions["firmness"], 1.0)
+            _wx = WEATHER_TYPES.get(self._conditions["weather"], {})
+            _roll_mod = max(0.3, _roll_mod + _wx.get("roll_mod", 0.0))
+            self.ball.roll_mod = _roll_mod
+            # Fog: reduce mini-map visibility
+            self._fog = (self._conditions["weather"] == "fog")
+        else:
+            self._conditions = None
+            self._fog = False
+
         # ── Wind — randomised once per hole ──────────────────────────────────
-        self.wind_angle    = random.uniform(0, 2 * math.pi)
+        self.wind_angle = random.uniform(0, 2 * math.pi)
+        _wind_floor     = getattr(game.current_tournament, "wind_strength_floor", 0)
+        _wt_weights     = [10, 25, 30, 20, 10, 5]
+        _wt_choices     = list(range(_wind_floor, 6))
         self.wind_strength = random.choices(
-            [0, 1, 2, 3, 4, 5], weights=[10, 25, 30, 20, 10, 5])[0]
+            _wt_choices, weights=_wt_weights[_wind_floor:])[0]
 
         # ── State flags ───────────────────────────────────────────────────────
         self.hole_complete  = False
@@ -199,6 +230,16 @@ class GolfRoundState:
         else:
             ball_acc = ball["acc_add"]
         new_acc  = club.accuracy + acc_bonus + ball_acc
+
+        # Phase 1: weather modifiers
+        if self._conditions is not None:
+            from src.career.tournament import WEATHER_TYPES, GREEN_SPEEDS
+            wx = WEATHER_TYPES.get(self._conditions["weather"], {})
+            new_dist *= (1.0 + wx.get("dist_mod", 0.0))
+            new_acc  += wx.get("acc_mod", 0.0)
+            # Green speed affects putter carry distance
+            if club.name == "Putter":
+                new_dist *= GREEN_SPEEDS.get(self._conditions["green_speed"], 1.0)
 
         # B2-6: Fitness → late-round fatigue (kicks in after hole 12)
         if self.hole_index >= 12:
@@ -324,11 +365,11 @@ class GolfRoundState:
         target_x = clamp(aim_x + result.shape_x + wind_x, 0, world_w - 1)
         target_y = clamp(aim_y + result.shape_y + wind_y, 0, world_h - 1)
 
-        # Roll distance — fraction of shot distance, scaled by the lie the
-        # ball is being struck from.
+        # Roll distance — fraction of shot distance, scaled by lie and firmness.
         shot_dist_px = math.sqrt((aim_x - self.ball.x) ** 2 +
                                  (aim_y - self.ball.y) ** 2)
-        roll_dist_px = shot_dist_px * _ROLL_FRAC.get(terrain, 0.0)
+        roll_dist_px = (shot_dist_px * _ROLL_FRAC.get(terrain, 0.0)
+                        * getattr(self.ball, "roll_mod", 1.0))
 
         # Issue #4: the club's listed max distance should be TOTAL (carry +
         # roll), not carry alone. Pull the aim/landing point back by the
@@ -717,12 +758,19 @@ class GolfRoundState:
         if self.ball.state == BallState.AT_REST and not self.hole_complete:
             self._draw_distance_to_pin(surface)
 
+        # Fog weather — faint tint over the viewport
+        if self._fog:
+            _fog_surf = pygame.Surface((VIEWPORT_W, VIEWPORT_H), pygame.SRCALPHA)
+            _fog_surf.fill((200, 210, 220, 28))
+            surface.blit(_fog_surf, (0, 0))
+
         terrain_name = TERRAIN_PROPS[self._ball_terrain()]['name']
         self.hud.draw(surface, self.hole, self.strokes,
                       self.current_club, self.shot_ctrl, terrain_name,
                       renderer=self.renderer, ball_world_pos=self.ball.pos,
                       wind_angle=self.wind_angle, wind_strength=self.wind_strength,
-                      ball_id=getattr(self.game.player, "ball_type", None))
+                      ball_id=getattr(self.game.player, "ball_type", None),
+                      conditions=self._conditions)
 
         if self.message and self.message_timer > 0:
             self._draw_message(surface)
@@ -1032,12 +1080,22 @@ class GolfRoundState:
                          f"({'E' if total_diff == 0 else ('+' + str(total_diff) if total_diff > 0 else str(total_diff))})")
         self._blit_centred(surface, total_txt, self.font_med, (160, 200, 160), cx, 372)
 
+        # Stableford points for this hole
+        t = self.game.current_tournament
+        if t is not None and getattr(t, "format", "stroke") == "stableford":
+            from src.career.tournament import Tournament as _T
+            pts = _T.stableford_points(diff)
+            pts_col = C_GREEN if pts >= 3 else C_WHITE if pts == 2 else C_RED
+            self._blit_centred(surface,
+                               f"Stableford: {pts} pt{'s' if pts != 1 else ''}",
+                               self.font_med, pts_col, cx, 402)
+
         if self.complete_timer > 1.2:
             next_label = ("Click to see final scorecard"
                           if self.hole_index >= 17
                           else "Click to continue to next hole")
             self._blit_centred(surface, next_label,
-                               self.font_med, (155, 155, 155), cx, 416)
+                               self.font_med, (155, 155, 155), cx, 430)
 
     def _blit_centred(self, surface, text, font, color, cx, y):
         surf = font.render(text, True, color)

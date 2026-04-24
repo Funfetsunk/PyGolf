@@ -430,11 +430,17 @@ class CareerHubState:
             _NAMES = {1: "Amateur", 2: "Challenger", 3: "Development",
                       4: "Continental", 5: "World", 6: "Grand"}
             name = f"Event {event_n} — {_NAMES.get(p.tour_level, 'Tour')} Circuit"
+            _fmt = ("stableford"
+                    if p.tour_level >= 2 and event_n % 4 == 3
+                    else "stroke")
+            if _fmt == "stableford":
+                name = f"Event {event_n} — {_NAMES.get(p.tour_level, 'Tour')} Stableford"
             t = Tournament(
                 name, p.tour_level,
                 [course.get_hole(i).par for i in range(course.total_holes)],
                 opps, is_major=False, event_number=event_n, total_events=total,
-                rng_seed=ev_seed, course_name=course.name)
+                rng_seed=ev_seed, course_name=course.name,
+                format=_fmt)
 
         self.game.current_tournament = t
         self.game.change_state(GolfRoundState(self.game, course, 0, []))

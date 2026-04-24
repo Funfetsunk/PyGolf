@@ -47,6 +47,21 @@ class Hole:
         # Legacy alias kept for code that still reads hole.visual_grid
         self.visual_grid = self.ground_layer
 
+        # Pin position variants — set per-tournament, default to standard (base pin_pos).
+        # _pin_offsets maps variant name → (col_offset, row_offset) from base pin_pos.
+        self.active_pin_position: str = "standard"
+        self._pin_offsets: dict[str, tuple[int, int]] = {}
+
+    @property
+    def effective_pin_pos(self) -> tuple[int, int]:
+        """The pin position for the current tournament setup."""
+        if self.active_pin_position == "standard" or not self._pin_offsets:
+            return self.pin_pos
+        off_col, off_row = self._pin_offsets.get(self.active_pin_position, (0, 0))
+        col = max(1, min(self.cols - 2, self.pin_pos[0] + off_col))
+        row = max(1, min(self.rows - 2, self.pin_pos[1] + off_row))
+        return (col, row)
+
     def get_terrain_at(self, col, row):
         """
         Return the Terrain enum for tile (col, row).

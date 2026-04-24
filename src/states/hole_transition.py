@@ -139,8 +139,13 @@ class HoleTransitionState:
         content_y = 172
 
         if t is not None:
-            lb = t.get_live_leaderboard(len(self.scores), self.scores)
-            self._draw_leaderboard(surface, lb, len(self.scores), t, content_y)
+            is_sford = getattr(t, "format", "stroke") == "stableford"
+            if is_sford:
+                lb = t.get_stableford_leaderboard(len(self.scores), self.scores)
+                self._draw_stableford_leaderboard(surface, lb, len(self.scores), t, content_y)
+            else:
+                lb = t.get_live_leaderboard(len(self.scores), self.scores)
+                self._draw_leaderboard(surface, lb, len(self.scores), t, content_y)
         else:
             self._draw_scorecard(surface, content_y)
 
@@ -215,6 +220,70 @@ class HoleTransitionState:
             vp_col = _vp_color(vp) if is_player else (
                 (150, 195, 150) if vp < 0 else (195, 150, 150) if vp > 0 else (175, 175, 175))
             surface.blit(self.font_lb.render(_vp(vp), True, vp_col), (col_vp + 4, ry + 5))
+            surface.blit(self.font_lb.render(str(holes_done), True, C_GRAY),
+                         (col_thru + 4, ry + 5))
+
+        row_start = hdr_y + 20
+        for i, entry in enumerate(top10):
+            draw_row(row_start + i * ROW_H, i + 1, entry, entry["is_player"])
+
+        if not in_top10 and player_entry is not None:
+            sep_y = row_start + 10 * ROW_H + 2
+            for x in range(tx, tx + tw, 8):
+                pygame.draw.line(surface, (55, 75, 55), (x, sep_y), (x + 4, sep_y))
+            dots = self.font_lb_hdr.render("· · ·", True, C_GRAY)
+            surface.blit(dots, (cx - dots.get_width() // 2, sep_y - 1))
+            draw_row(sep_y + 12, player_pos, player_entry, True)
+
+    # ── Stableford leaderboard ────────────────────────────────────────────────
+
+    def _draw_stableford_leaderboard(self, surface, lb, holes_done, tournament, top_y):
+        top10        = lb[:10]
+        player_pos   = next((i + 1 for i, e in enumerate(lb) if e["is_player"]), None)
+        player_entry = next((e for e in lb if e["is_player"]), None)
+        in_top10     = player_pos is not None and player_pos <= 10
+
+        cx = SCREEN_W // 2
+        tw = 700
+        tx = cx - tw // 2
+
+        col_pos  = tx
+        col_name = tx + 44
+        col_pts  = tx + 310
+        col_thru = tx + 400
+
+        rnd_num = tournament.current_round_number
+        rnd_lbl = (f"Stableford — Round {rnd_num}  •  After hole {holes_done}"
+                   if tournament.total_rounds > 1
+                   else f"Stableford  •  After hole {holes_done}")
+        pygame.draw.rect(surface, C_HDR,
+                         pygame.Rect(tx, top_y, tw, 22), border_radius=4)
+        surface.blit(self.font_lb_hdr.render(rnd_lbl, True, (150, 200, 120)),
+                     (tx + 6, top_y + 4))
+
+        hdr_y = top_y + 24
+        pygame.draw.rect(surface, (20, 32, 20), pygame.Rect(tx, hdr_y, tw, 18))
+        for txt, cx_pos in [("Pos", col_pos), ("Player", col_name),
+                             ("Pts", col_pts), ("Thru", col_thru)]:
+            surface.blit(self.font_lb_hdr.render(txt, True, (130, 170, 110)),
+                         (cx_pos + 4, hdr_y + 2))
+
+        def draw_row(ry, pos, entry, is_player):
+            if is_player:
+                pygame.draw.rect(surface, C_PLAYER_BG,
+                                 pygame.Rect(tx, ry, tw, ROW_H - 2), border_radius=2)
+                pygame.draw.rect(surface, C_PLAYER_BD,
+                                 pygame.Rect(tx, ry, tw, ROW_H - 2), 1, border_radius=2)
+            elif pos % 2 == 0:
+                pygame.draw.rect(surface, C_ROW_ALT,
+                                 pygame.Rect(tx, ry, tw, ROW_H - 2))
+            tc  = C_WHITE if is_player else (195, 205, 195)
+            pts = entry["points"]
+            surface.blit(self.font_lb.render(str(pos), True, tc), (col_pos + 4, ry + 5))
+            name_str = ("★ " + entry["name"]) if is_player else entry["name"]
+            surface.blit(self.font_lb.render(name_str, True, tc), (col_name + 4, ry + 5))
+            pts_col = C_GREEN if (is_player and pts > holes_done * 2) else tc
+            surface.blit(self.font_lb.render(str(pts), True, pts_col), (col_pts + 4, ry + 5))
             surface.blit(self.font_lb.render(str(holes_done), True, C_GRAY),
                          (col_thru + 4, ry + 5))
 

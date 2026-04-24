@@ -74,9 +74,32 @@ class HUD:
 
     # ── Draw ──────────────────────────────────────────────────────────────────
 
+    # Colour codes for individual condition values
+    _COND_COLOURS = {
+        ("Pin", "front"):      (100, 200, 100),   # easy
+        ("Pin", "standard"):   None,               # default
+        ("Pin", "tucked"):     (215,  50,  50),   # hard
+        ("Greens", "slow"):    (100, 200, 100),
+        ("Greens", "normal"):  None,
+        ("Greens", "fast"):    (215, 175,  50),
+        ("Greens", "slick"):   (215,  50,  50),
+        ("Ground", "soft"):    (100, 200, 100),
+        ("Ground", "normal"):  None,
+        ("Ground", "firm"):    (215, 175,  50),
+        ("Ground", "hard"):    (215,  50,  50),
+        ("Weather", "clear"):  None,
+        ("Weather", "rain"):   (215, 175,  50),
+        ("Weather", "cold"):   (215, 175,  50),
+        ("Weather", "heat"):   (100, 200, 100),
+        ("Weather", "fog"):    (215, 175,  50),
+    }
+
+    def _cond_colour(self, label: str, value: str) -> tuple:
+        return self._COND_COLOURS.get((label, value.lower()), C_OFF_WHITE) or C_OFF_WHITE
+
     def draw(self, surface, hole, strokes, club, shot_ctrl, terrain_name,
              renderer=None, ball_world_pos=None, wind_angle=0.0, wind_strength=0,
-             ball_id=None):
+             ball_id=None, conditions=None):
         """
         Draw the complete HUD panel.
 
@@ -200,21 +223,50 @@ class HUD:
 
         self._divider(surface, 488)
 
+        # ── Course Conditions ─────────────────────────────────────────────────
+        map_top_y = 494  # default start for minimap label (no conditions)
+
+        if conditions is not None:
+            self._text(surface, "Conditions", self.font_small, C_LIGHT_GRAY, x, 494)
+            half = (rw - 8) // 2
+            rows = [
+                ("Pin",     conditions.get("pin",         "standard"),
+                 "Greens",  conditions.get("green_speed", "normal")),
+                ("Ground",  conditions.get("firmness",    "normal"),
+                 "Weather", conditions.get("weather",     "clear")),
+            ]
+            ry = 510
+            for lbl_a, val_a, lbl_b, val_b in rows:
+                self._text(surface,
+                           f"{lbl_a}: {val_a.capitalize()}",
+                           self.font_small,
+                           self._cond_colour(lbl_a, val_a),
+                           x, ry)
+                self._text(surface,
+                           f"{lbl_b}: {val_b.capitalize()}",
+                           self.font_small,
+                           self._cond_colour(lbl_b, val_b),
+                           x + half + 8, ry)
+                ry += 18
+            self._divider(surface, ry + 4)
+            map_top_y = ry + 10
+
         # ── Mini-map ──────────────────────────────────────────────────────────
-        y = 494
-        self._text(surface, "Course Map", self.font_small, C_LIGHT_GRAY, x, y)
+        self._text(surface, "Course Map", self.font_small, C_LIGHT_GRAY, x, map_top_y)
+        map_start  = map_top_y + 20
+        map_height = max(80, self.screen_height - map_start - 60)
+        minimap_rect = pygame.Rect(x, map_start, rw, map_height)
 
         if renderer is not None and ball_world_pos is not None:
-            renderer.draw_minimap(surface, self.minimap_rect, ball_world_pos)
+            renderer.draw_minimap(surface, minimap_rect, ball_world_pos)
         else:
-            # Placeholder if renderer not provided
-            pygame.draw.rect(surface, C_DARK_GRAY, self.minimap_rect, border_radius=3)
-            pygame.draw.rect(surface, C_DIVIDER,   self.minimap_rect, 1, border_radius=3)
+            pygame.draw.rect(surface, C_DARK_GRAY, minimap_rect, border_radius=3)
+            pygame.draw.rect(surface, C_DIVIDER,   minimap_rect, 1, border_radius=3)
 
-        self._divider(surface, self.minimap_rect.bottom + 8)
+        self._divider(surface, minimap_rect.bottom + 8)
 
         # ── Controls (compact) ────────────────────────────────────────────────
-        y = self.minimap_rect.bottom + 16
+        y = minimap_rect.bottom + 16
         for line in ("Click near ball  •  Drag to aim",
                      "Release to shoot  •  Scroll = club"):
             self._text(surface, line, self.font_small, (110, 115, 108), x, y)

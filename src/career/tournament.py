@@ -15,7 +15,35 @@ Live leaderboard
 get_live_leaderboard(holes_done, current_hole_scores) compares the player's
 score through the first N holes against every opponent's score through the
 same N holes.  This gives a fair running comparison after every hole.
+
+Phase 1 additions
+-----------------
+format        : scoring format ("stroke" / "stableford" / "match" / "skins")
+green_speed   : "slow" / "normal" / "fast" / "slick"
+firmness      : "soft" / "normal" / "firm" / "hard"
+weather       : "clear" / "rain" / "cold" / "heat" / "fog"
+pin_positions : list of per-hole pin variant names ("front"/"standard"/"tucked")
+wind_strength_floor : minimum wind strength per hole (2 for majors, else 0)
 """
+
+# ── Scoring format constants ──────────────────────────────────────────────────
+FORMAT_STROKE_PLAY = "stroke"
+FORMAT_STABLEFORD  = "stableford"
+FORMAT_MATCH_PLAY  = "match"
+FORMAT_SKINS       = "skins"
+
+# ── Course condition tables ────────────────────────────────────────────────────
+GREEN_SPEEDS = {"slow": 0.85, "normal": 1.0, "fast": 1.18, "slick": 1.35}
+
+FIRMNESS = {"soft": 0.70, "normal": 1.0, "firm": 1.20, "hard": 1.45}
+
+WEATHER_TYPES = {
+    "clear": {"acc_mod":  0.00, "dist_mod":  0.00, "roll_mod":  0.00},
+    "rain":  {"acc_mod": -0.05, "dist_mod":  0.00, "roll_mod": -0.15},
+    "cold":  {"acc_mod":  0.00, "dist_mod": -0.05, "roll_mod":  0.00},
+    "heat":  {"acc_mod":  0.00, "dist_mod":  0.07, "roll_mod":  0.00},
+    "fog":   {"acc_mod": -0.03, "dist_mod":  0.00, "roll_mod":  0.00},
+}
 
 # Prize fund (total $) per tour level
 PRIZE_FUNDS = {
@@ -72,7 +100,8 @@ class Tournament:
                  major_prize_fund: int | None = None,
                  is_qschool: bool = False,
                  rng_seed: int | None = None,
-                 course_name: str | None = None):
+                 course_name: str | None = None,
+                 format: str = FORMAT_STROKE_PLAY):
         import random as _random
         self.name         = name
         self.tour_level   = tour_level
@@ -104,6 +133,52 @@ class Tournament:
         self.rng_seed = int(rng_seed)
         rng = _random.Random(self.rng_seed)
 
+        # ── Scoring format ────────────────────────────────────────────────────
+        self.format = format
+
+        # ── Course conditions (Phase 1) ───────────────────────────────────────
+        # Pin positions — one per hole
+        _pin_choices = ["front", "standard", "standard", "tucked"]
+        self.pin_positions: list[str] = (
+            ["tucked"] * len(hole_pars) if is_major
+            else [rng.choice(_pin_choices) for _ in hole_pars]
+        )
+
+        # Green speed
+        if is_major:
+            self.green_speed = rng.choice(["fast", "slick"])
+        elif tour_level >= 5:
+            self.green_speed = rng.choices(["normal", "fast", "fast"], k=1)[0]
+        elif tour_level >= 3:
+            self.green_speed = rng.choices(
+                ["slow", "normal", "normal", "fast"], k=1)[0]
+        else:
+            self.green_speed = rng.choices(["slow", "normal", "normal"], k=1)[0]
+
+        # Fairway firmness
+        self.firmness = rng.choices(
+            ["soft", "normal", "normal", "firm", "hard"],
+            weights=[1, 4, 4, 2, 1], k=1)[0]
+
+        # Weather
+        if is_major:
+            self.weather = rng.choices(
+                ["clear", "rain", "cold", "fog"],
+                weights=[5, 2, 1, 1], k=1)[0]
+        else:
+            self.weather = rng.choices(
+                ["clear", "rain", "cold", "heat", "fog"],
+                weights=[5, 2, 1, 1, 1], k=1)[0]
+
+        # Major hard setup enforcement
+        if is_major:
+            self.pin_positions = ["tucked"] * len(hole_pars)
+            if self.green_speed not in ("fast", "slick"):
+                self.green_speed = "fast"
+            self.wind_strength_floor = 2
+        else:
+            self.wind_strength_floor = 0
+
         # player_rounds[i] = list of 18 hole scores for round i
         self.player_rounds: list[list[int]] = []
 
@@ -114,6 +189,68 @@ class Tournament:
                 opp.simulate_holes(self.hole_pars, rng=rng)
                 for _ in range(self.total_rounds)
             ]
+
+    # ── Stableford helpers ────────────────────────────────────────────────────
+
+    @staticmethod
+    def stableford_points(score_vs_par: int) -> int:
+        """Convert a hole score vs par to Stableford points."""
+        return {-3: 5, -2: 4, -1: 3, 0: 2, 1: 1}.get(score_vs_par, 0)
+
+    def get_stableford_leaderboard(self, holes_done: int,
+                                   current_hole_scores: list) -> list[dict]:
+        """
+        Running Stableford points leaderboard.
+        Same calling convention as get_live_leaderboard; entries contain
+        "points" instead of "vs_par".
+        """
+        completed_rounds = len(self.player_rounds)
+        rnd = min(self.current_round_index, self.total_rounds - 1)
+
+        # Player: all completed rounds + current partial
+        player_pts = 0
+        for r_scores in self.player_rounds:
+            for h, s in enumerate(r_scores):
+                player_pts += self.stableford_points(s - self.hole_pars[h])
+        for h, s in enumerate(current_hole_scores):
+            player_pts += self.stableford_points(s - self.hole_pars[h])
+
+        entries = [{"name": "You", "is_player": True,
+                    "points": player_pts, "thru": holes_done, "nationality": ""}]
+
+        for opp in self.opponents:
+            opp_pts = 0
+            for r in range(completed_rounds):
+                for h, s in enumerate(self._opp_holes[opp.name][r]):
+                    opp_pts += self.stableford_points(s - self.hole_pars[h])
+            if completed_rounds < self.total_rounds:
+                for h in range(holes_done):
+                    s = self._opp_holes[opp.name][rnd][h]
+                    opp_pts += self.stableford_points(s - self.hole_pars[h])
+            entries.append({"name": opp.name, "is_player": False,
+                            "points": opp_pts, "thru": holes_done,
+                            "nationality": opp.nationality})
+
+        return sorted(entries, key=lambda e: (-e["points"], e["name"]))
+
+    # ── Pin position application ──────────────────────────────────────────────
+
+    def apply_pin_positions(self, course) -> None:
+        """Apply this tournament's pin positions to every hole in the course."""
+        for i in range(min(len(self.pin_positions), course.total_holes)):
+            hole = course.get_hole(i)
+            pos  = self.pin_positions[i]
+            hole.active_pin_position = pos
+            # Derive offsets: "front" moves 2 tiles toward the tee;
+            # "tucked" shifts 2 tiles to the right column-wise.
+            tee_row = hole.tee_pos[1]
+            pin_row = hole.pin_pos[1]
+            row_dir = 2 if tee_row > pin_row else -2   # toward tee
+            hole._pin_offsets = {
+                "front":    (0,  row_dir),
+                "standard": (0,  0),
+                "tucked":   (2,  0),
+            }
 
     # ── Round tracking ────────────────────────────────────────────────────────
 
@@ -212,8 +349,52 @@ class Tournament:
 
         return sorted(entries, key=lambda e: (e["total"], e["name"]))
 
+    def get_stableford_final_leaderboard(self) -> list[dict]:
+        """
+        Final Stableford leaderboard using per-hole opponent data.
+        Each entry: name, is_player, rounds (pts per round), total, points, nationality.
+        Sorted by total points descending.
+        """
+        rnd_count = len(self.player_rounds)
+        if rnd_count == 0:
+            return []
+
+        def _player_pts_round(r_scores):
+            return sum(self.stableford_points(s - self.hole_pars[h])
+                       for h, s in enumerate(r_scores))
+
+        def _opp_pts_round(name, rnd):
+            return sum(self.stableford_points(s - self.hole_pars[h])
+                       for h, s in enumerate(self._opp_holes[name][rnd]))
+
+        player_rnd_pts = [_player_pts_round(r) for r in self.player_rounds]
+        entries = [{
+            "name":        "You",
+            "is_player":   True,
+            "rounds":      player_rnd_pts,
+            "total":       sum(player_rnd_pts),
+            "points":      sum(player_rnd_pts),
+            "nationality": "",
+        }]
+
+        for opp in self.opponents:
+            rnd_pts = [_opp_pts_round(opp.name, r) for r in range(rnd_count)]
+            entries.append({
+                "name":        opp.name,
+                "is_player":   False,
+                "rounds":      rnd_pts,
+                "total":       sum(rnd_pts),
+                "points":      sum(rnd_pts),
+                "nationality": opp.nationality,
+            })
+
+        return sorted(entries, key=lambda e: (-e["total"], e["name"]))
+
     def get_player_position(self) -> int:
-        for i, e in enumerate(self.get_leaderboard()):
+        lb = (self.get_stableford_final_leaderboard()
+              if self.format == FORMAT_STABLEFORD
+              else self.get_leaderboard())
+        for i, e in enumerate(lb):
             if e["is_player"]:
                 return i + 1
         return len(self.opponents) + 1
@@ -234,22 +415,29 @@ class Tournament:
 
     def to_dict(self) -> dict:
         return {
-            "name":          self.name,
-            "tour_level":    self.tour_level,
-            "hole_pars":     self.hole_pars,
-            "is_major":      self.is_major,
-            "major_id":      self.major_id,
-            "is_qschool":    self.is_qschool,
-            "total_rounds":  self.total_rounds,
-            "event_number":  self.event_number,
-            "total_events":  self.total_events,
-            "prize_fund":    self.prize_fund,
-            "rng_seed":      self.rng_seed,
-            "course_name":   self.course_name,
-            "player_rounds": [list(r) for r in self.player_rounds],
-            "opp_holes":     {k: [list(r) for r in v]
-                              for k, v in self._opp_holes.items()},
-            "opponents":     [o.to_dict() for o in self.opponents],
+            "name":                 self.name,
+            "tour_level":           self.tour_level,
+            "hole_pars":            self.hole_pars,
+            "is_major":             self.is_major,
+            "major_id":             self.major_id,
+            "is_qschool":           self.is_qschool,
+            "total_rounds":         self.total_rounds,
+            "event_number":         self.event_number,
+            "total_events":         self.total_events,
+            "prize_fund":           self.prize_fund,
+            "rng_seed":             self.rng_seed,
+            "course_name":          self.course_name,
+            "player_rounds":        [list(r) for r in self.player_rounds],
+            "opp_holes":            {k: [list(r) for r in v]
+                                     for k, v in self._opp_holes.items()},
+            "opponents":            [o.to_dict() for o in self.opponents],
+            # Phase 1 fields
+            "format":               self.format,
+            "pin_positions":        list(self.pin_positions),
+            "green_speed":          self.green_speed,
+            "firmness":             self.firmness,
+            "weather":              self.weather,
+            "wind_strength_floor":  self.wind_strength_floor,
         }
 
     @classmethod
@@ -275,4 +463,11 @@ class Tournament:
         t.player_rounds = [list(r) for r in data.get("player_rounds", [])]
         t._opp_holes    = {k: [list(r) for r in v]
                            for k, v in data.get("opp_holes", {}).items()}
+        # Phase 1 fields — defaulted so pre-Phase-1 saves still load
+        t.format               = data.get("format",               FORMAT_STROKE_PLAY)
+        t.pin_positions        = list(data.get("pin_positions",   []))
+        t.green_speed          = data.get("green_speed",          "normal")
+        t.firmness             = data.get("firmness",             "normal")
+        t.weather              = data.get("weather",              "clear")
+        t.wind_strength_floor  = data.get("wind_strength_floor",  0)
         return t

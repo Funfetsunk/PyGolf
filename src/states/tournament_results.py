@@ -72,9 +72,13 @@ class TournamentResultsState:
         self.font_small  = fonts.body(14)
         self.font_large  = fonts.heading(22)
 
-        self._leaderboard = tournament.get_leaderboard()
-        self._scroll      = 0
-        self._btn_hov     = False
+        is_sford = getattr(tournament, "format", "stroke") == "stableford"
+        self._leaderboard  = (tournament.get_stableford_final_leaderboard()
+                              if is_sford
+                              else tournament.get_leaderboard())
+        self._is_stableford = is_sford
+        self._scroll        = 0
+        self._btn_hov       = False
 
         # Table geometry
         self._table_x  = 50
@@ -178,8 +182,11 @@ class TournamentResultsState:
         pygame.draw.rect(surface, C_HDR,
                          pygame.Rect(tx, ty, tw, 24), border_radius=4)
 
-        headers = ["Pos", "Name", "Nationality",
-                   "Rd 1", "Rd 2", "Rd 3", "Rd 4", "Total"]
+        headers = (["Pos", "Name", "Nationality",
+                    "Rd 1 Pts", "Rd 2 Pts", "Rd 3 Pts", "Rd 4 Pts", "Total Pts"]
+                   if self._is_stableford else
+                   ["Pos", "Name", "Nationality",
+                    "Rd 1", "Rd 2", "Rd 3", "Rd 4", "Total"])
         for i, h in enumerate(headers):
             s = self.font_hdr.render(h, True, (150, 200, 120))
             surface.blit(s, (col[i] + 4, ty + 4))
@@ -215,22 +222,30 @@ class TournamentResultsState:
             surface.blit(self.font_small.render(entry["nationality"], True, C_GRAY),
                          (col[2] + 4, ry + 3))
 
-            par = self.tournament.course_par
             rounds = entry["rounds"]
-            for ri, rx in enumerate([col[3], col[4], col[5], col[6]]):
-                if ri < len(rounds):
-                    vp  = rounds[ri] - par
-                    txt = _vs_par_str(vp)
-                    col_c = _vs_par_color(vp) if is_pl else (180, 180, 180)
-                    surface.blit(self.font_small.render(txt, True, col_c),
-                                 (rx + 4, ry + 3))
-
-            # Total vs par
-            vp  = entry["vs_par"]
-            txt = _vs_par_str(vp)
-            surface.blit(self.font_small.render(txt, True,
-                         _vs_par_color(vp) if is_pl else (200, 200, 200)),
-                         (col[7] + 4, ry + 3))
+            if self._is_stableford:
+                for ri, rx in enumerate([col[3], col[4], col[5], col[6]]):
+                    if ri < len(rounds):
+                        surface.blit(self.font_small.render(str(rounds[ri]), True,
+                                     tc if not is_pl else C_GOLD),
+                                     (rx + 4, ry + 3))
+                surface.blit(self.font_small.render(str(entry["total"]), True,
+                             C_GOLD if is_pl else (200, 200, 200)),
+                             (col[7] + 4, ry + 3))
+            else:
+                par = self.tournament.course_par
+                for ri, rx in enumerate([col[3], col[4], col[5], col[6]]):
+                    if ri < len(rounds):
+                        vp  = rounds[ri] - par
+                        txt = _vs_par_str(vp)
+                        col_c = _vs_par_color(vp) if is_pl else (180, 180, 180)
+                        surface.blit(self.font_small.render(txt, True, col_c),
+                                     (rx + 4, ry + 3))
+                vp  = entry["vs_par"]
+                txt = _vs_par_str(vp)
+                surface.blit(self.font_small.render(txt, True,
+                             _vs_par_color(vp) if is_pl else (200, 200, 200)),
+                             (col[7] + 4, ry + 3))
 
     @staticmethod
     def _ordinal(n: int) -> str:

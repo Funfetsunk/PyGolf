@@ -79,6 +79,10 @@ class Ball:
 
         self._spin_angle = 0.0   # for rolling animation
 
+        # Firmness modifier — scales roll distance (set per-hole from tournament).
+        # >1.0 = firmer ground = more roll; <1.0 = softer = less roll.
+        self.roll_mod: float = 1.0
+
     @property
     def pos(self):
         return (self.x, self.y)

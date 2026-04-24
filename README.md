@@ -2,6 +2,8 @@
 
 A top-down 2D pixel art golf career game built in Python. Work your way up from the Amateur Circuit to the Grand Tour, win the 4 Majors, and reach World No. 1.
 
+See [CHANGELOG.md](CHANGELOG.md) for a history of changes.
+
 ---
 
 ## Quick Start

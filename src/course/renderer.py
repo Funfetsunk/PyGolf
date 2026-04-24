@@ -257,7 +257,8 @@ class CourseRenderer:
 
         self._course_surface = ground_surf
         self._draw_border_shadows()
-        self._draw_pin()
+        # Pin hole is drawn dynamically in draw_animated_elements so that
+        # per-tournament pin positions (front/standard/tucked) take effect.
         self._draw_tee_marker()
 
     def _draw_border_shadows(self):
@@ -363,7 +364,7 @@ class CourseRenderer:
                 my = int(row * ts * scale)
                 pygame.draw.rect(mini, color, (mx, my, mtw, mth))
 
-        pc, pr  = self.hole.pin_pos
+        pc, pr  = self.hole.effective_pin_pos
         pin_mx  = int((pc * ts + ts // 2) * scale)
         pin_my  = int((pr * ts + ts // 2) * scale)
         pygame.draw.circle(mini, (0,   0,   0),   (pin_mx, pin_my), 4)
@@ -386,11 +387,17 @@ class CourseRenderer:
 
     def draw_animated_elements(self, surface, camera_x: float,
                                camera_y: float, elapsed: float) -> None:
-        """Draw time-varying elements (animated flag) over the static course."""
-        col, row = self.hole.pin_pos
+        """Draw time-varying elements (pin hole + animated flag) over the static course."""
+        col, row = self.hole.effective_pin_pos
         ts = self.tile_size
         wcx = col * ts + ts // 2
         wcy = row * ts + ts // 2
+
+        # Pin hole — drawn dynamically so active_pin_position changes take effect.
+        scx_pin = int(wcx - camera_x)
+        scy_pin = int(wcy - camera_y)
+        pygame.draw.circle(surface, (255, 255, 255), (scx_pin, scy_pin), 7)
+        pygame.draw.circle(surface, (0,   0,   0),   (scx_pin, scy_pin), 6)
         scx = int(wcx - camera_x)
         scy = int(wcy - camera_y)
 
@@ -413,7 +420,7 @@ class CourseRenderer:
                 int(world_y - camera_y + viewport_y))
 
     def get_pin_world_pos(self):
-        col, row = self.hole.pin_pos
+        col, row = self.hole.effective_pin_pos
         return (col * self.tile_size + self.tile_size // 2,
                 row * self.tile_size + self.tile_size // 2)
 
