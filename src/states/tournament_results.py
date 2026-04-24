@@ -72,11 +72,16 @@ class TournamentResultsState:
         self.font_small  = fonts.body(14)
         self.font_large  = fonts.heading(22)
 
-        is_sford = getattr(tournament, "format", "stroke") == "stableford"
-        self._leaderboard  = (tournament.get_stableford_final_leaderboard()
-                              if is_sford
-                              else tournament.get_leaderboard())
-        self._is_stableford = is_sford
+        fmt = getattr(tournament, "format", "stroke")
+        self._is_stableford = (fmt == "stableford")
+        self._is_matchplay  = (fmt == "match")
+        if self._is_stableford:
+            self._leaderboard = tournament.get_stableford_final_leaderboard()
+        elif self._is_matchplay:
+            # Match play uses bracket notation — build a minimal leaderboard
+            self._leaderboard = self._build_matchplay_leaderboard(tournament)
+        else:
+            self._leaderboard = tournament.get_leaderboard()
         self._scroll        = 0
         self._btn_hov       = False
 
@@ -96,6 +101,28 @@ class TournamentResultsState:
         btn_w, btn_h = 280, 50
         self._btn = pygame.Rect(
             SCREEN_W // 2 - btn_w // 2, SCREEN_H - 68, btn_w, btn_h)
+
+    # ── Match play leaderboard builder ───────────────────────────────────────
+
+    @staticmethod
+    def _build_matchplay_leaderboard(tournament) -> list[dict]:
+        """Minimal leaderboard for match play — just shows bracket results."""
+        entries = []
+        player_pos = tournament._match_final_position or (len(tournament.opponents) + 1)
+        entries.append({
+            "name": "You", "is_player": True,
+            "rounds": [], "total": 0,
+            "vs_par": 0, "nationality": "",
+            "_mp_result": f"Position {player_pos}",
+        })
+        for opp in tournament.opponents:
+            entries.append({
+                "name": opp.name, "is_player": False,
+                "rounds": [], "total": 0,
+                "vs_par": 0, "nationality": opp.nationality,
+                "_mp_result": "",
+            })
+        return entries
 
     # ── Event handling ────────────────────────────────────────────────────────
 
@@ -162,8 +189,11 @@ class TournamentResultsState:
             sb = self.font_medium.render(sb_txt, True, C_GREEN)
             surface.blit(sb, (cx - sb.get_width() // 2, 118))
 
-        # ── Leaderboard table ─────────────────────────────────────────────────
-        self._draw_table(surface)
+        # ── Leaderboard / bracket table ───────────────────────────────────────
+        if self._is_matchplay:
+            self._draw_matchplay_summary(surface)
+        else:
+            self._draw_table(surface)
 
         # ── Button ────────────────────────────────────────────────────────────
         bg = C_BTN_HOV if self._btn_hov else C_BTN
@@ -177,6 +207,47 @@ class TournamentResultsState:
             hint = self.font_small.render("↑↓ / Scroll to see more", True, C_GRAY)
             surface.blit(hint, (cx - hint.get_width() // 2,
                                 self._btn.top - 20))
+
+    def _draw_matchplay_summary(self, surface):
+        """Bracket progression summary for match play events."""
+        cx = SCREEN_W // 2
+        t  = self.tournament
+        ty = self._table_y
+
+        bracket    = getattr(t, "bracket", [])
+        match_rnd  = getattr(t, "match_round", 0)
+        player_pos = getattr(t, "_match_final_position", None)
+        player_won = (player_pos == 1)
+
+        pw, ph = 600, max(80, len(bracket) * 52 + 40)
+        px = cx - pw // 2
+        panel = pygame.Rect(px, ty, pw, ph)
+        pygame.draw.rect(surface, (16, 22, 34), panel, border_radius=10)
+        pygame.draw.rect(surface, (60, 80, 130), panel, 2, border_radius=10)
+
+        hdr = self.font_hdr.render("Bracket Results", True, (150, 200, 120))
+        surface.blit(hdr, (cx - hdr.get_width() // 2, ty + 8))
+
+        round_names = ["Quarter-Final", "Semi-Final", "Final"]
+        if len(bracket) <= 2:
+            round_names = ["Semi-Final", "Final"]
+        if len(bracket) == 1:
+            round_names = ["Final"]
+
+        ry = ty + 32
+        for i, opp_name in enumerate(bracket):
+            won_this = (i < match_rnd or (i == match_rnd and player_won))
+            label_rnd = round_names[i] if i < len(round_names) else f"Round {i+1}"
+            col   = (55, 185, 55) if won_this else (215, 50, 50)
+            badge = "Won" if won_this else "Lost"
+            line  = self.font_medium.render(
+                f"{label_rnd}  vs  {opp_name}   —   {badge}", True, col)
+            surface.blit(line, (cx - line.get_width() // 2, ry))
+            ry += 48
+
+        if player_won:
+            champ = self.font_large.render("Match Play Champion!", True, C_GOLD)
+            surface.blit(champ, (cx - champ.get_width() // 2, ry + 8))
 
     def _draw_table(self, surface):
         tx = self._table_x

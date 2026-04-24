@@ -139,10 +139,13 @@ class HoleTransitionState:
         content_y = 172
 
         if t is not None:
-            is_sford = getattr(t, "format", "stroke") == "stableford"
-            if is_sford:
+            fmt = getattr(t, "format", "stroke")
+            if fmt == "stableford":
                 lb = t.get_stableford_leaderboard(len(self.scores), self.scores)
                 self._draw_stableford_leaderboard(surface, lb, len(self.scores), t, content_y)
+            elif fmt == "match":
+                st = t.get_match_status(self.scores)
+                self._draw_match_play_status(surface, st, t, content_y)
             else:
                 lb = t.get_live_leaderboard(len(self.scores), self.scores)
                 self._draw_leaderboard(surface, lb, len(self.scores), t, content_y)
@@ -298,6 +301,67 @@ class HoleTransitionState:
             dots = self.font_lb_hdr.render("· · ·", True, C_GRAY)
             surface.blit(dots, (cx - dots.get_width() // 2, sep_y - 1))
             draw_row(sep_y + 12, player_pos, player_entry, True)
+
+    # ── Match play status ─────────────────────────────────────────────────────
+
+    def _draw_match_play_status(self, surface, st, tournament, top_y):
+        """Shows current match play standing after this hole."""
+        cx = SCREEN_W // 2
+        tw = 700
+        tx = cx - tw // 2
+
+        rnd_num   = (tournament.match_round + 1)
+        total_rnd = tournament.total_rounds
+        opp_name  = (tournament.match_opponent or "Opponent")
+
+        rnd_lbl = (f"Match Play — Round {rnd_num}/{total_rnd}  vs  {opp_name}"
+                   f"  •  After hole {len(self.scores)}")
+        pygame.draw.rect(surface, C_HDR,
+                         pygame.Rect(tx, top_y, tw, 22), border_radius=4)
+        surface.blit(self.font_lb_hdr.render(rnd_lbl, True, (150, 200, 120)),
+                     (tx + 6, top_y + 4))
+
+        if st is None:
+            return
+
+        pu        = st["player_up"]
+        ou        = st["opp_up"]
+        halved    = st["holes_played"] - pu - ou
+        remaining = st["remaining"]
+        diff      = pu - ou
+
+        if diff > 0:
+            status_txt = f"{diff} UP"
+            status_col = C_GREEN
+        elif diff < 0:
+            status_txt = f"{-diff} DOWN"
+            status_col = C_RED
+        else:
+            status_txt = "ALL SQUARE"
+            status_col = C_WHITE
+
+        # Status row
+        status_y = top_y + 34
+        st_surf = self.font_large.render(status_txt, True, status_col)
+        surface.blit(st_surf, (cx - st_surf.get_width() // 2, status_y))
+
+        # Hole counts
+        detail_y = status_y + 44
+        col_w    = tw // 3
+        for i, (lbl, val, col) in enumerate([
+            ("You", str(pu),     C_GREEN if pu > ou else C_WHITE),
+            ("Halved", str(halved), C_GRAY),
+            (opp_name[:12], str(ou), C_RED if ou > pu else C_WHITE),
+        ]):
+            cx_col = tx + i * col_w + col_w // 2
+            l = self.font_lb_hdr.render(lbl, True, C_GRAY)
+            v = self.font_large.render(val, True, col)
+            surface.blit(l, (cx_col - l.get_width() // 2, detail_y))
+            surface.blit(v, (cx_col - v.get_width() // 2, detail_y + 18))
+
+        remain_surf = self.font_lb_hdr.render(
+            f"{remaining} holes remaining", True, C_GRAY)
+        surface.blit(remain_surf, (cx - remain_surf.get_width() // 2, detail_y + 54))
 
     # ── Scorecard fallback ────────────────────────────────────────────────────
 

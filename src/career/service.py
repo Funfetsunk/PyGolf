@@ -51,13 +51,16 @@ def process_tournament_result(player, tournament) -> dict:
             if major_id and major_id not in player.majors_won:
                 player.majors_won.append(major_id)
 
-        lb = tournament.get_leaderboard()
-        for pos, entry in enumerate(lb, start=1):
-            if not entry["is_player"]:
-                name = entry["name"]
-                opp_pts = tournament.get_season_points(pos)
-                player.opp_season_points[name] = (
-                    player.opp_season_points.get(name, 0) + opp_pts)
+        # Track opponent season points (not applicable for match play — field
+        # doesn't have stroke-play totals; skip to avoid misleading standings).
+        if getattr(tournament, "format", "stroke") != "match":
+            lb = tournament.get_leaderboard()
+            for pos, entry in enumerate(lb, start=1):
+                if not entry["is_player"]:
+                    name = entry["name"]
+                    opp_pts = tournament.get_season_points(pos)
+                    player.opp_season_points[name] = (
+                        player.opp_season_points.get(name, 0) + opp_pts)
 
     # World ranking points (Tour 4+). Q-school earns a small boost too.
     rp = get_ranking_points(player.tour_level, position, tournament.is_major)

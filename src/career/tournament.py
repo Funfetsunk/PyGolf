@@ -114,7 +114,11 @@ class Tournament:
         self.is_major     = is_major
         self.major_id     = major_id
         self.is_qschool   = is_qschool
-        self.total_rounds = 2 if is_major else 1
+        # Match play uses one round per bracket match; determined before simulation.
+        if format == FORMAT_MATCH_PLAY and opponents:
+            self.total_rounds = min(4, max(2, len(opponents)))
+        else:
+            self.total_rounds = 2 if is_major else 1
         self.event_number = event_number
         self.total_events = total_events
         if is_major:
@@ -135,6 +139,19 @@ class Tournament:
 
         # ── Scoring format ────────────────────────────────────────────────────
         self.format = format
+
+        # ── Match play bracket (Phase 2) ──────────────────────────────────────
+        if self.format == FORMAT_MATCH_PLAY and self.opponents:
+            _opp_copy = list(self.opponents)
+            rng.shuffle(_opp_copy)
+            self.bracket: list[str] = [o.name for o in _opp_copy[:self.total_rounds]]
+        else:
+            self.bracket: list[str] = []
+        self.match_round:    int      = 0
+        self.match_opponent: str | None = self.bracket[0] if self.bracket else None
+        # Set when the tournament concludes (won or eliminated) for get_player_position()
+        self.match_eliminated:      bool      = False
+        self._match_final_position: int | None = None
 
         # ── Course conditions (Phase 1) ───────────────────────────────────────
         # Pin positions — one per hole
@@ -189,6 +206,93 @@ class Tournament:
                 opp.simulate_holes(self.hole_pars, rng=rng)
                 for _ in range(self.total_rounds)
             ]
+
+    # ── Match play helpers (Phase 2) ─────────────────────────────────────────
+
+    def get_match_status(self, player_hole_scores: list) -> dict | None:
+        """
+        Running hole-by-hole match play status.
+        Returns dict with player_up, opp_up, holes_played, remaining, early_done.
+        Returns None when format is not match play.
+        """
+        if self.format != FORMAT_MATCH_PLAY or self.match_opponent is None:
+            return None
+        opp = self.match_opponent
+        rnd = self.match_round
+        opp_rounds = self._opp_holes.get(opp, [])
+        opp_scores = opp_rounds[min(rnd, len(opp_rounds) - 1)] if opp_rounds else []
+
+        player_up = opp_up = 0
+        n = min(len(player_hole_scores), len(opp_scores), len(self.hole_pars))
+        for i in range(n):
+            if player_hole_scores[i] < opp_scores[i]:
+                player_up += 1
+            elif player_hole_scores[i] > opp_scores[i]:
+                opp_up += 1
+
+        holes_played = n
+        remaining = max(0, 18 - holes_played)
+        lead = abs(player_up - opp_up)
+
+        return {
+            "player_up":   player_up,
+            "opp_up":      opp_up,
+            "holes_played": holes_played,
+            "remaining":   remaining,
+            "early_done":  lead > remaining,  # concession condition
+            "opponent":    opp,
+            "round":       rnd,
+            "total_rounds": self.total_rounds,
+        }
+
+    def get_match_result(self, player_hole_scores: list) -> dict:
+        """Final match result dict — call after all holes (or concession)."""
+        st = self.get_match_status(player_hole_scores)
+        if st is None:
+            return {"result": "win", "margin": "w/o", "player_up": 0,
+                    "opp_up": 0, "holes_played": 0, "opponent": "",
+                    "round": 0, "total_rounds": 1}
+
+        pu = st["player_up"]
+        ou = st["opp_up"]
+        hp = st["holes_played"]
+        remaining = st["remaining"]
+        diff = pu - ou
+
+        if diff > 0:
+            result = "win"
+            margin = (f"{diff}&{remaining}" if remaining > 0
+                      else f"{diff} UP")
+        elif diff < 0:
+            result = "loss"
+            margin = (f"{-diff}&{remaining}" if remaining > 0
+                      else f"{-diff} DOWN")
+        else:
+            # All square after 18 — deterministic tiebreak via rng seed
+            import random as _r
+            _tiebreak = _r.Random(self.rng_seed + self.match_round)
+            result = "win" if _tiebreak.random() > 0.5 else "loss"
+            margin = "19th hole"
+
+        return {
+            "result":       result,
+            "margin":       margin,
+            "player_up":    pu,
+            "opp_up":       ou,
+            "holes_played": hp,
+            "opponent":     st["opponent"],
+            "round":        st["round"],
+            "total_rounds": st["total_rounds"],
+        }
+
+    def advance_bracket(self) -> bool:
+        """Advance to next bracket round. Returns True if more rounds remain."""
+        self.match_round += 1
+        if self.match_round < len(self.bracket):
+            self.match_opponent = self.bracket[self.match_round]
+            return True
+        self.match_opponent = None
+        return False
 
     # ── Stableford helpers ────────────────────────────────────────────────────
 
@@ -268,6 +372,8 @@ class Tournament:
         self.player_rounds.append(list(hole_scores))
 
     def is_complete(self) -> bool:
+        if getattr(self, "match_eliminated", False):
+            return True
         return len(self.player_rounds) >= self.total_rounds
 
     # ── Live leaderboard (during a round) ────────────────────────────────────
@@ -391,6 +497,10 @@ class Tournament:
         return sorted(entries, key=lambda e: (-e["total"], e["name"]))
 
     def get_player_position(self) -> int:
+        if self.format == FORMAT_MATCH_PLAY:
+            if self._match_final_position is not None:
+                return self._match_final_position
+            return len(self.opponents) + 1
         lb = (self.get_stableford_final_leaderboard()
               if self.format == FORMAT_STABLEFORD
               else self.get_leaderboard())
@@ -438,6 +548,12 @@ class Tournament:
             "firmness":             self.firmness,
             "weather":              self.weather,
             "wind_strength_floor":  self.wind_strength_floor,
+            # Phase 2 — match play
+            "bracket":              list(self.bracket),
+            "match_round":          self.match_round,
+            "match_opponent":       self.match_opponent,
+            "match_eliminated":     self.match_eliminated,
+            "_match_final_position": self._match_final_position,
         }
 
     @classmethod
@@ -470,4 +586,10 @@ class Tournament:
         t.firmness             = data.get("firmness",             "normal")
         t.weather              = data.get("weather",              "clear")
         t.wind_strength_floor  = data.get("wind_strength_floor",  0)
+        # Phase 2 — match play
+        t.bracket              = list(data.get("bracket",         []))
+        t.match_round          = data.get("match_round",          0)
+        t.match_opponent       = data.get("match_opponent",       None)
+        t.match_eliminated     = data.get("match_eliminated",     False)
+        t._match_final_position = data.get("_match_final_position", None)
         return t

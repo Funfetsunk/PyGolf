@@ -21,7 +21,7 @@ from src.career.player import Player
 from src.utils import web
 
 SAVE_DIR    = "saves"
-SAVE_FORMAT = 1
+SAVE_FORMAT = 2   # v2: Phase 2 match play fields added
 
 # localStorage key prefix — namespaces our saves so we don't collide with
 # anything else on the same origin (e.g. if hosted alongside other apps).
@@ -143,10 +143,11 @@ def load_game(path: str):
         raise SaveCorruptError(f"Could not read save: {exc}") from exc
 
     version = data.get("save_format", 0)
-    if version != SAVE_FORMAT:
+    if version > SAVE_FORMAT:
         raise SaveVersionError(
-            f"Save format v{version} is not compatible with this build (v{SAVE_FORMAT})."
+            f"Save format v{version} is newer than this build (v{SAVE_FORMAT})."
         )
+    # v1 → v2 migration: Phase 1+2 fields default in from_dict; no data changes needed.
 
     try:
         player = Player.from_dict(data["player"])
@@ -189,12 +190,12 @@ def get_save_preview(path: str) -> dict:
         }
 
     version = data.get("save_format", 0)
-    if version != SAVE_FORMAT:
+    if version > SAVE_FORMAT:
         return {
             "name":    os.path.basename(path),
             "path":    path,
             "corrupt": True,
-            "error":   f"Incompatible save version (v{version}, expected v{SAVE_FORMAT})",
+            "error":   f"Save is from a newer build (v{version}, this is v{SAVE_FORMAT})",
         }
 
     p = data.get("player", {})

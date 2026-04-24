@@ -712,6 +712,21 @@ class GolfRoundState:
         SoundManager.instance().stop_ambient()
 
         updated_scores = self.scores + [self.strokes]
+        t = self.game.current_tournament
+
+        # ── Match play — check for concession or round completion ─────────────
+        from src.career.tournament import FORMAT_MATCH_PLAY
+        if t is not None and getattr(t, "format", "stroke") == FORMAT_MATCH_PLAY:
+            st = t.get_match_status(updated_scores)
+            is_match_over = self.hole_index >= 17
+            if not is_match_over and st is not None:
+                lead = abs(st["player_up"] - st["opp_up"])
+                is_match_over = lead > st["remaining"]
+            if is_match_over:
+                from src.states.match_result import MatchResultState
+                self.game.change_state(
+                    MatchResultState(self.game, self.course, updated_scores))
+                return
 
         if self.hole_index >= 17:
             # All 18 holes done — show final scorecard
@@ -771,6 +786,14 @@ class GolfRoundState:
                       wind_angle=self.wind_angle, wind_strength=self.wind_strength,
                       ball_id=getattr(self.game.player, "ball_type", None),
                       conditions=self._conditions)
+
+        # Match play status overlay (bottom-left of viewport)
+        _t = self.game.current_tournament
+        if _t is not None and getattr(_t, "format", "stroke") == "match":
+            _all_sc = self.scores + ([self.strokes] if self.hole_complete else [])
+            _mp_st  = _t.get_match_status(_all_sc)
+            if _mp_st is not None:
+                self._draw_match_play_status(surface, _mp_st)
 
         if self.message and self.message_timer > 0:
             self._draw_message(surface)
@@ -958,6 +981,46 @@ class GolfRoundState:
         if hasattr(self, "_audio_panel") and self._audio_panel.visible:
             self._audio_panel.draw(surface)
 
+    def _draw_match_play_status(self, surface, st: dict):
+        """Compact match play scoreboard in the bottom-left of the viewport."""
+        pu = st["player_up"]
+        ou = st["opp_up"]
+        diff = pu - ou
+
+        if diff > 0:
+            status_txt = f"{diff} UP"
+            status_col = C_GREEN
+        elif diff < 0:
+            status_txt = f"{-diff} DOWN"
+            status_col = C_RED
+        else:
+            status_txt = "ALL SQUARE"
+            status_col = C_WHITE
+
+        remaining = st["remaining"]
+        opp_name  = (st["opponent"] or "Opp")[:14]
+        rnd       = st["round"] + 1
+        total     = st["total_rounds"]
+
+        pw, ph = 200, 68
+        px, py = 8, VIEWPORT_H - ph - 8
+        panel = pygame.Rect(px, py, pw, ph)
+        bg = pygame.Surface((pw, ph), pygame.SRCALPHA)
+        bg.fill((0, 0, 0, 160))
+        surface.blit(bg, (px, py))
+        pygame.draw.rect(surface, (80, 110, 80), panel, 1, border_radius=6)
+
+        rnd_lbl = self.font_med.render(
+            f"Match {rnd}/{total} vs {opp_name}", True, (160, 190, 160))
+        surface.blit(rnd_lbl, (px + 6, py + 5))
+
+        st_surf = self.font_med.render(status_txt, True, status_col)
+        surface.blit(st_surf, (px + 6, py + 26))
+
+        thru_surf = self.font_med.render(
+            f"({remaining} to play)", True, (140, 150, 140))
+        surface.blit(thru_surf, (px + 6, py + 48))
+
     def _draw_aim_arrow(self, surface, start, end, power):
         from src.golf.shot import ShotShape, SHAPE_CURVE_FRACTION
         r = int(min(255, power * 2 * 255))
@@ -1080,7 +1143,7 @@ class GolfRoundState:
                          f"({'E' if total_diff == 0 else ('+' + str(total_diff) if total_diff > 0 else str(total_diff))})")
         self._blit_centred(surface, total_txt, self.font_med, (160, 200, 160), cx, 372)
 
-        # Stableford points for this hole
+        # Format-specific info for this hole
         t = self.game.current_tournament
         if t is not None and getattr(t, "format", "stroke") == "stableford":
             from src.career.tournament import Tournament as _T
@@ -1089,6 +1152,19 @@ class GolfRoundState:
             self._blit_centred(surface,
                                f"Stableford: {pts} pt{'s' if pts != 1 else ''}",
                                self.font_med, pts_col, cx, 402)
+        elif t is not None and getattr(t, "format", "stroke") == "match":
+            # Show hole result vs match opponent
+            all_sc = self.scores + [self.strokes]
+            st = t.get_match_status(all_sc)
+            if st is not None:
+                pu, ou = st["player_up"], st["opp_up"]
+                if pu > ou:
+                    hole_col, hole_txt = C_GREEN, f"{pu - ou} UP  ({st['remaining']} to play)"
+                elif ou > pu:
+                    hole_col, hole_txt = C_RED, f"{ou - pu} DOWN  ({st['remaining']} to play)"
+                else:
+                    hole_col, hole_txt = C_WHITE, f"All Square  ({st['remaining']} to play)"
+                self._blit_centred(surface, hole_txt, self.font_med, hole_col, cx, 402)
 
         if self.complete_timer > 1.2:
             next_label = ("Click to see final scorecard"

@@ -429,12 +429,20 @@ class CareerHubState:
         else:
             _NAMES = {1: "Amateur", 2: "Challenger", 3: "Development",
                       4: "Continental", 5: "World", 6: "Grand"}
-            name = f"Event {event_n} — {_NAMES.get(p.tour_level, 'Tour')} Circuit"
-            _fmt = ("stableford"
-                    if p.tour_level >= 2 and event_n % 4 == 3
-                    else "stroke")
-            if _fmt == "stableford":
+            # Format selection — one match play per season (event 5) on tour 2+;
+            # one stableford every 4 events; rest are stroke play.
+            _is_matchplay  = (p.tour_level >= 2 and event_n == 5)
+            _is_stableford = (not _is_matchplay
+                              and p.tour_level >= 2 and event_n % 4 == 3)
+            if _is_matchplay:
+                _fmt = "match"
+                name = f"Event {event_n} — {_NAMES.get(p.tour_level, 'Tour')} Match Play Championship"
+            elif _is_stableford:
+                _fmt = "stableford"
                 name = f"Event {event_n} — {_NAMES.get(p.tour_level, 'Tour')} Stableford"
+            else:
+                _fmt = "stroke"
+                name = f"Event {event_n} — {_NAMES.get(p.tour_level, 'Tour')} Circuit"
             t = Tournament(
                 name, p.tour_level,
                 [course.get_hole(i).par for i in range(course.total_holes)],
@@ -678,6 +686,24 @@ class CareerHubState:
             mc = self.font_small.render(
                 f"Prize fund: ${major_info['prize_fund']:,}  •  2 rounds", True, C_GOLD)
             surface.blit(mc, (cx - mc.get_width() // 2, ty)); ty += 20
+
+        # Format badge for special events
+        if not p.qschool_pending and not major_id:
+            _is_matchplay  = (p.tour_level >= 2 and event_n == 5)
+            _is_stableford = (not _is_matchplay
+                              and p.tour_level >= 2 and event_n % 4 == 3)
+            if _is_matchplay:
+                mp_lbl = self.font_hdr.render(
+                    "FORMAT: Match Play Championship", True, (80, 140, 220))
+                surface.blit(mp_lbl, (cx - mp_lbl.get_width() // 2, ty)); ty += 22
+                mp_sub = self.font_small.render(
+                    "Win holes to advance through the bracket",
+                    True, (120, 160, 200))
+                surface.blit(mp_sub, (cx - mp_sub.get_width() // 2, ty)); ty += 20
+            elif _is_stableford:
+                sb_lbl = self.font_hdr.render(
+                    "FORMAT: Stableford", True, (80, 180, 120))
+                surface.blit(sb_lbl, (cx - sb_lbl.get_width() // 2, ty)); ty += 22
 
         tn = self.font_med.render(tour_name, True, (100, 175, 80))
         surface.blit(tn, (cx - tn.get_width() // 2, ty)); ty += 36
