@@ -237,8 +237,11 @@ class RoundSummaryState:
         # ── Main content: leaderboard (tournament) or scorecard (free play) ───
         content_y = offset_y + 72
         if t is not None:
-            if getattr(t, "format", "stroke") == "stableford":
+            fmt = getattr(t, "format", "stroke")
+            if fmt == "stableford":
                 self._draw_stableford_leaderboard(surface, t, content_y)
+            elif fmt == "skins":
+                self._draw_skins_summary(surface, t, content_y)
             else:
                 self._draw_leaderboard(surface, t, content_y)
         else:
@@ -420,6 +423,55 @@ class RoundSummaryState:
             ellipsis = self.font_lb_hdr.render("· · ·", True, C_GRAY)
             surface.blit(ellipsis, (cx - ellipsis.get_width() // 2, sep_y - 2))
             draw_row(sep_y + 14, player_pos, player_entry, True)
+
+    # ── Skins summary ─────────────────────────────────────────────────────────
+
+    def _draw_skins_summary(self, surface, tournament, top_y):
+        """Skins event: per-hole skin results and total prize."""
+        cx = SCREEN_W // 2
+        skins_won_count = sum(1 for w in tournament.skins_won if w)
+        total_prize     = sum(tournament.skins_prize_per_hole)
+
+        # Header bar
+        pygame.draw.rect(surface, C_HDR,
+                         pygame.Rect(cx - 430, top_y, 860, 28), border_radius=4)
+        hdr = self.font_lb_hdr.render(
+            f"Skins Summary  |  {skins_won_count} skin(s) won  |  "
+            f"Total prize:  ${total_prize:,}",
+            True, C_GOLD)
+        surface.blit(hdr, (cx - hdr.get_width() // 2, top_y + 6))
+
+        # Two-column grid: front 9 left, back 9 right
+        grid_top  = top_y + 36
+        row_h     = 26
+        col_left  = cx - 430
+        col_right = cx + 10
+
+        for i in range(9):
+            for side in range(2):
+                hole_i = i + side * 9
+                if hole_i >= len(tournament.hole_pars):
+                    continue
+                x   = col_left if side == 0 else col_right
+                y   = grid_top + i * row_h
+                won = (tournament.skins_won[hole_i]
+                       if hole_i < len(tournament.skins_won) else False)
+                prize = (tournament.skins_prize_per_hole[hole_i]
+                         if hole_i < len(tournament.skins_prize_per_hole) else 0)
+
+                if won:
+                    row_txt = f"Hole {hole_i + 1:2d}   Skin Won   +${prize:,}"
+                    row_col = C_GREEN
+                else:
+                    row_txt = f"Hole {hole_i + 1:2d}   —"
+                    row_col = C_GRAY
+                surface.blit(self.font_small.render(row_txt, True, row_col), (x, y))
+
+        # Total prize box
+        prize_y = grid_top + 9 * row_h + 10
+        prize_lbl = self.font_large.render(
+            f"Prize money:  ${total_prize:,}", True, C_GOLD)
+        surface.blit(prize_lbl, (cx - prize_lbl.get_width() // 2, prize_y))
 
     # ── Scorecard section (free-play mode) ────────────────────────────────────
 

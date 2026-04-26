@@ -429,17 +429,30 @@ class CareerHubState:
         else:
             _NAMES = {1: "Amateur", 2: "Challenger", 3: "Development",
                       4: "Continental", 5: "World", 6: "Grand"}
-            # Format selection — one match play per season (event 5) on tour 2+;
-            # one stableford every 4 events; rest are stroke play.
+            # Format selection — fixed event slots per season:
+            #   event 1:  Pro-Am opener (all tours)
+            #   event 5:  Match Play Championship (tour 2+)
+            #   event 8:  Skins Game (tour 2+)
+            #   event N where N%4==3: Stableford (tour 2+, not already taken)
+            #   all others: stroke play
             _is_matchplay  = (p.tour_level >= 2 and event_n == 5)
-            _is_stableford = (not _is_matchplay
+            _is_skins      = (p.tour_level >= 2 and event_n == 8)
+            _is_stableford = (not _is_matchplay and not _is_skins
                               and p.tour_level >= 2 and event_n % 4 == 3)
+            _is_proam      = (not _is_matchplay and not _is_skins
+                              and not _is_stableford and event_n == 1)
             if _is_matchplay:
                 _fmt = "match"
                 name = f"Event {event_n} — {_NAMES.get(p.tour_level, 'Tour')} Match Play Championship"
+            elif _is_skins:
+                _fmt = "skins"
+                name = f"Event {event_n} — {_NAMES.get(p.tour_level, 'Tour')} Skins Game"
             elif _is_stableford:
                 _fmt = "stableford"
                 name = f"Event {event_n} — {_NAMES.get(p.tour_level, 'Tour')} Stableford"
+            elif _is_proam:
+                _fmt = "proam"
+                name = f"Event {event_n} — {_NAMES.get(p.tour_level, 'Tour')} Pro-Am"
             else:
                 _fmt = "stroke"
                 name = f"Event {event_n} — {_NAMES.get(p.tour_level, 'Tour')} Circuit"
@@ -690,8 +703,11 @@ class CareerHubState:
         # Format badge for special events
         if not p.qschool_pending and not major_id:
             _is_matchplay  = (p.tour_level >= 2 and event_n == 5)
-            _is_stableford = (not _is_matchplay
+            _is_skins      = (p.tour_level >= 2 and event_n == 8)
+            _is_stableford = (not _is_matchplay and not _is_skins
                               and p.tour_level >= 2 and event_n % 4 == 3)
+            _is_proam      = (not _is_matchplay and not _is_skins
+                              and not _is_stableford and event_n == 1)
             if _is_matchplay:
                 mp_lbl = self.font_hdr.render(
                     "FORMAT: Match Play Championship", True, (80, 140, 220))
@@ -700,10 +716,26 @@ class CareerHubState:
                     "Win holes to advance through the bracket",
                     True, (120, 160, 200))
                 surface.blit(mp_sub, (cx - mp_sub.get_width() // 2, ty)); ty += 20
+            elif _is_skins:
+                sk_lbl = self.font_hdr.render(
+                    "FORMAT: Skins Game", True, (220, 160, 50))
+                surface.blit(sk_lbl, (cx - sk_lbl.get_width() // 2, ty)); ty += 22
+                sk_sub = self.font_small.render(
+                    "Beat all 3 opponents on a hole to win the skin",
+                    True, (200, 170, 100))
+                surface.blit(sk_sub, (cx - sk_sub.get_width() // 2, ty)); ty += 20
             elif _is_stableford:
                 sb_lbl = self.font_hdr.render(
                     "FORMAT: Stableford", True, (80, 180, 120))
                 surface.blit(sb_lbl, (cx - sb_lbl.get_width() // 2, ty)); ty += 22
+            elif _is_proam:
+                pa_lbl = self.font_hdr.render(
+                    "FORMAT: Pro-Am", True, (100, 200, 230))
+                surface.blit(pa_lbl, (cx - pa_lbl.get_width() // 2, ty)); ty += 22
+                pa_sub = self.font_small.render(
+                    "Partner plays each hole — best ball score counts",
+                    True, (120, 180, 210))
+                surface.blit(pa_sub, (cx - pa_sub.get_width() // 2, ty)); ty += 20
 
         tn = self.font_med.render(tour_name, True, (100, 175, 80))
         surface.blit(tn, (cx - tn.get_width() // 2, ty)); ty += 36

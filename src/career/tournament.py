@@ -18,12 +18,17 @@ same N holes.  This gives a fair running comparison after every hole.
 
 Phase 1 additions
 -----------------
-format        : scoring format ("stroke" / "stableford" / "match" / "skins")
+format        : scoring format ("stroke" / "stableford" / "match" / "skins" / "proam")
 green_speed   : "slow" / "normal" / "fast" / "slick"
 firmness      : "soft" / "normal" / "firm" / "hard"
 weather       : "clear" / "rain" / "cold" / "heat" / "fog"
 pin_positions : list of per-hole pin variant names ("front"/"standard"/"tucked")
 wind_strength_floor : minimum wind strength per hole (2 for majors, else 0)
+
+Phase 3 additions
+-----------------
+skins         : skin_value, skins_carried, skins_won, skins_prize_per_hole
+proam         : partner_scores (pre-simulated amateur best-ball per hole)
 """
 
 # ── Scoring format constants ──────────────────────────────────────────────────
@@ -31,11 +36,15 @@ FORMAT_STROKE_PLAY = "stroke"
 FORMAT_STABLEFORD  = "stableford"
 FORMAT_MATCH_PLAY  = "match"
 FORMAT_SKINS       = "skins"
+FORMAT_PROAM       = "proam"
 
 # ── Course condition tables ────────────────────────────────────────────────────
 GREEN_SPEEDS = {"slow": 0.85, "normal": 1.0, "fast": 1.18, "slick": 1.35}
 
 FIRMNESS = {"soft": 0.70, "normal": 1.0, "firm": 1.20, "hard": 1.45}
+
+# Base skin value per tour level (× carryover multiplier in play)
+SKIN_VALUES = {1: 100, 2: 500, 3: 1_000, 4: 2_500, 5: 5_000, 6: 10_000}
 
 WEATHER_TYPES = {
     "clear": {"acc_mod":  0.00, "dist_mod":  0.00, "roll_mod":  0.00},
@@ -153,6 +162,10 @@ class Tournament:
         self.match_eliminated:      bool      = False
         self._match_final_position: int | None = None
 
+        # ── Skins — cap field to 3 opponents (Phase 3) ───────────────────────
+        if self.format == FORMAT_SKINS and len(self.opponents) > 3:
+            self.opponents = self.opponents[:3]
+
         # ── Course conditions (Phase 1) ───────────────────────────────────────
         # Pin positions — one per hole
         _pin_choices = ["front", "standard", "standard", "tucked"]
@@ -195,6 +208,18 @@ class Tournament:
             self.wind_strength_floor = 2
         else:
             self.wind_strength_floor = 0
+
+        # ── Skins / Pro-Am initial state (Phase 3) ───────────────────────────
+        self.skin_value: int             = (SKIN_VALUES.get(tour_level, 500)
+                                            if self.format == FORMAT_SKINS else 0)
+        self.skins_carried: int          = 0
+        self.skins_won: list[bool]       = [False] * len(self.hole_pars)
+        self.skins_prize_per_hole: list[int] = [0] * len(self.hole_pars)
+        # Amateur partner best-ball: mostly bogeys, occasional birdie
+        self.partner_scores: list[int]   = (
+            [max(1, p + rng.randint(-1, 3)) for p in self.hole_pars]
+            if self.format == FORMAT_PROAM else []
+        )
 
         # player_rounds[i] = list of 18 hole scores for round i
         self.player_rounds: list[list[int]] = []
@@ -293,6 +318,46 @@ class Tournament:
             return True
         self.match_opponent = None
         return False
+
+    # ── Skins helpers (Phase 3) ──────────────────────────────────────────────
+
+    def get_skins_result(self, hole_index: int, player_score: int) -> dict:
+        """
+        Evaluate the skin for this hole; update skins_carried / skins_won /
+        skins_prize_per_hole.  Returns:
+          {"won": bool, "skin_value": int, "carried": bool}
+        player must beat ALL opponents to win the skin.
+        """
+        rnd = 0
+        opp_scores = [
+            self._opp_holes[opp.name][rnd][hole_index]
+            for opp in self.opponents[:3]
+            if (opp.name in self._opp_holes
+                and rnd < len(self._opp_holes[opp.name])
+                and hole_index < len(self._opp_holes[opp.name][rnd]))
+        ]
+        current_value = self.skin_value * (1 + self.skins_carried)
+        player_wins   = bool(opp_scores) and all(player_score < s for s in opp_scores)
+
+        if hole_index < len(self.skins_won):
+            self.skins_won[hole_index] = player_wins
+        if hole_index < len(self.skins_prize_per_hole):
+            self.skins_prize_per_hole[hole_index] = current_value if player_wins else 0
+
+        if player_wins:
+            self.skins_carried = 0
+        else:
+            self.skins_carried += 1
+
+        return {"won": player_wins, "skin_value": current_value, "carried": not player_wins}
+
+    # ── Pro-Am helpers (Phase 3) ──────────────────────────────────────────────
+
+    def get_proam_hole_score(self, player_score: int, hole_index: int) -> int:
+        """Return the team score: best ball of player and pre-simulated partner."""
+        if not self.partner_scores or hole_index >= len(self.partner_scores):
+            return player_score
+        return min(player_score, self.partner_scores[hole_index])
 
     # ── Stableford helpers ────────────────────────────────────────────────────
 
@@ -554,6 +619,12 @@ class Tournament:
             "match_opponent":       self.match_opponent,
             "match_eliminated":     self.match_eliminated,
             "_match_final_position": self._match_final_position,
+            # Phase 3 — skins / pro-am
+            "skin_value":           self.skin_value,
+            "skins_carried":        self.skins_carried,
+            "skins_won":            list(self.skins_won),
+            "skins_prize_per_hole": list(self.skins_prize_per_hole),
+            "partner_scores":       list(self.partner_scores),
         }
 
     @classmethod
@@ -592,4 +663,10 @@ class Tournament:
         t.match_opponent       = data.get("match_opponent",       None)
         t.match_eliminated     = data.get("match_eliminated",     False)
         t._match_final_position = data.get("_match_final_position", None)
+        # Phase 3 — skins / pro-am
+        t.skin_value           = data.get("skin_value",           0)
+        t.skins_carried        = data.get("skins_carried",        0)
+        t.skins_won            = list(data.get("skins_won",            []))
+        t.skins_prize_per_hole = list(data.get("skins_prize_per_hole", []))
+        t.partner_scores       = list(data.get("partner_scores",       []))
         return t

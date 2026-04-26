@@ -142,6 +142,10 @@ class GolfRoundState:
         self.message       = ""
         self.message_timer = 0.0
 
+        # Phase 3 — per-hole skins / pro-am result (reset each hole)
+        self._last_skin_result: dict | None = None
+        self._proam_team_score: int | None  = None
+
         # ── Animation + audio ─────────────────────────────────────────────────
         self._flag_time       = 0.0
         self._score_snd_played = False
@@ -445,6 +449,7 @@ class GolfRoundState:
             self.hole_complete  = True
             self.complete_timer = 0.0
             self._play_score_sound()
+            self._resolve_skins_or_proam()
 
         # Stop the roll immediately if the ball enters heavy terrain
         if self.ball.state == BallState.ROLLING:
@@ -643,6 +648,18 @@ class GolfRoundState:
         else:
             _snd.play("ball_in_hole")
 
+    def _resolve_skins_or_proam(self):
+        """Phase 3: evaluate hole-level skins / pro-am result at completion."""
+        t = self.game.current_tournament
+        if t is None:
+            return
+        from src.career.tournament import FORMAT_SKINS, FORMAT_PROAM
+        fmt = getattr(t, "format", "stroke")
+        if fmt == FORMAT_SKINS:
+            self._last_skin_result = t.get_skins_result(self.hole_index, self.strokes)
+        elif fmt == FORMAT_PROAM:
+            self._proam_team_score = t.get_proam_hole_score(self.strokes, self.hole_index)
+
     def _auto_select_club(self):
         terrain = self._ball_terrain()
         prev_idx = getattr(self, "club_idx", None)
@@ -711,11 +728,17 @@ class GolfRoundState:
         from src.utils.sound_manager    import SoundManager
         SoundManager.instance().stop_ambient()
 
-        updated_scores = self.scores + [self.strokes]
         t = self.game.current_tournament
 
+        # Phase 3 — Pro-Am records the team best-ball score, not the solo score.
+        from src.career.tournament import FORMAT_MATCH_PLAY, FORMAT_PROAM
+        if (t is not None and getattr(t, "format", "stroke") == FORMAT_PROAM
+                and self._proam_team_score is not None):
+            updated_scores = self.scores + [self._proam_team_score]
+        else:
+            updated_scores = self.scores + [self.strokes]
+
         # ── Match play — check for concession or round completion ─────────────
-        from src.career.tournament import FORMAT_MATCH_PLAY
         if t is not None and getattr(t, "format", "stroke") == FORMAT_MATCH_PLAY:
             st = t.get_match_status(updated_scores)
             is_match_over = self.hole_index >= 17
@@ -1165,6 +1188,23 @@ class GolfRoundState:
                 else:
                     hole_col, hole_txt = C_WHITE, f"All Square  ({st['remaining']} to play)"
                 self._blit_centred(surface, hole_txt, self.font_med, hole_col, cx, 402)
+        elif t is not None and getattr(t, "format", "stroke") == "skins":
+            if self._last_skin_result is not None:
+                if self._last_skin_result["won"]:
+                    skin_txt = f"Skin Won!  +${self._last_skin_result['skin_value']:,}"
+                    skin_col = C_GREEN
+                else:
+                    next_pot = getattr(t, "skin_value", 0) * (1 + getattr(t, "skins_carried", 0))
+                    skin_txt = f"Skin carries  (pot now ${next_pot:,})"
+                    skin_col = C_YELLOW
+                self._blit_centred(surface, skin_txt, self.font_med, skin_col, cx, 402)
+        elif t is not None and getattr(t, "format", "stroke") == "proam":
+            if self._proam_team_score is not None and self._proam_team_score < self.strokes:
+                pa_txt = f"Team score: {self._proam_team_score}  (partner played better)"
+                self._blit_centred(surface, pa_txt, self.font_med, (100, 200, 230), cx, 402)
+            elif self._proam_team_score is not None:
+                pa_txt = f"Team score: {self._proam_team_score}"
+                self._blit_centred(surface, pa_txt, self.font_med, C_WHITE, cx, 402)
 
         if self.complete_timer > 1.2:
             next_label = ("Click to see final scorecard"
