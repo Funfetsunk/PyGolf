@@ -51,9 +51,16 @@ def process_tournament_result(player, tournament) -> dict:
             if major_id and major_id not in player.majors_won:
                 player.majors_won.append(major_id)
 
+        # Phase 6 — wins_per_tour
+        if position == 1:
+            tl = player.tour_level
+            player.wins_per_tour[tl] = player.wins_per_tour.get(tl, 0) + 1
+
         # Track opponent season points (not applicable for match play — field
         # doesn't have stroke-play totals; skip to avoid misleading standings).
-        if getattr(tournament, "format", "stroke") != "match":
+        fmt = getattr(tournament, "format", "stroke")
+        lb  = None
+        if fmt != "match":
             lb = tournament.get_leaderboard()
             for pos, entry in enumerate(lb, start=1):
                 if not entry["is_player"]:
@@ -92,6 +99,72 @@ def process_tournament_result(player, tournament) -> dict:
     for sid in player.hired_staff:
         salary = STAFF_TYPES.get(sid, {}).get("salary", 0)
         player.spend_money(salary)
+
+    # Phase 4 — Tour Championship winner gets a promotion wildcard
+    if (getattr(tournament, "is_finale", False) and position == 1
+            and not is_qschool):
+        tournament.promotion_wildcard = True
+
+    # Phase 5 — rival tracker
+    if not is_qschool:
+        if lb is None:
+            try:
+                lb = tournament.get_leaderboard()
+            except Exception:
+                lb = []
+        try:
+            player.check_rival(lb)
+            player.update_head_to_head(lb)
+        except Exception:
+            pass
+
+    # Phase 5 — reputation gains
+    if not is_qschool and position == 1:
+        if getattr(tournament, "is_major", False):
+            player.gain_reputation(15)
+        elif fmt == "match":
+            player.gain_reputation(8)
+        else:
+            player.gain_reputation(5)
+
+    # Phase 6 — format wins and special condition achievements
+    if not is_qschool and position == 1:
+        if fmt == "match":
+            player.unlock_achievement("win_match_play")
+        elif fmt == "skins":
+            player.unlock_achievement("win_skins")
+        elif fmt == "stableford":
+            player.unlock_achievement("win_stableford")
+
+        # rain_win
+        if getattr(tournament, "weather", None) == "rain":
+            player.unlock_achievement("rain_win")
+
+        # comeback_win — player was 5+ strokes behind leader after round 1
+        try:
+            p_rounds = getattr(tournament, "player_rounds", [])
+            opp_holes = getattr(tournament, "_opp_holes", {})
+            if len(p_rounds) >= 2 and opp_holes:
+                p_r1 = sum(p_rounds[0])
+                best_opp_r1 = min(sum(v[0]) for v in opp_holes.values() if v)
+                if p_r1 - best_opp_r1 >= 5:
+                    player.unlock_achievement("comeback_win")
+        except Exception:
+            pass
+
+        # beat_rival_major
+        if getattr(tournament, "is_major", False) and player.rival_name:
+            try:
+                if lb is None:
+                    lb = tournament.get_leaderboard()
+                rival_entry  = next((e for e in lb
+                                     if e.get("name") == player.rival_name), None)
+                if rival_entry is not None:
+                    rival_pos = lb.index(rival_entry) + 1
+                    if position < rival_pos:
+                        player.unlock_achievement("beat_rival_major")
+            except Exception:
+                pass
 
     player._check_achievements()
     return {"position": position, "prize": prize, "points": pts,
@@ -132,7 +205,12 @@ class CareerService:
                 result = player.apply_tournament_result(tournament)
 
         if player is not None:
-            player.log_round(course.name, sum(scores), course.par)
+            try:
+                hole_pars = [course.get_hole(i).par for i in range(len(scores))]
+            except Exception:
+                hole_pars = None
+            player.log_round(course.name, sum(scores), course.par,
+                             hole_scores=scores, hole_pars=hole_pars)
             self._autosave()
 
         return result

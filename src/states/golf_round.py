@@ -163,6 +163,10 @@ class GolfRoundState:
         self._last_safe_y        = tee_wy
         self._bounce_in_progress = False   # True while tree-bounce is animating
 
+        # Phase 6 — achievement tracking per hole
+        self._had_tree_bounce_this_hole  = False
+        self._last_putt_distance_yards   = 0.0
+
         self._auto_select_club()
 
         # Apply resume state if one was provided (from a mid-round save).
@@ -212,8 +216,12 @@ class GolfRoundState:
             return club
         ball = get_ball(getattr(player, "ball_type", "range"))
 
+        tmp = getattr(player, "temp_stat_modifiers", {})
+
         def eff(key):
-            return player.stats.get(key, 50) + player.staff_stat_bonus(key)
+            return (player.stats.get(key, 50)
+                    + player.staff_stat_bonus(key)
+                    + tmp.get(key, 0))
 
         # Power scales distance: 50 = 1.0x, 80 = 1.15x
         power_mult = 1.0 + (eff("power") - 50) / 200.0
@@ -340,6 +348,15 @@ class GolfRoundState:
         if result is None:
             return
 
+        # Phase 6 — record pre-shot distance for long_putt detection
+        if self.current_club.name == "Putter":
+            import math as _math
+            pin_wx, pin_wy = self._pin_world_pos()
+            self._last_putt_distance_yards = (
+                _math.sqrt((self.ball.x - pin_wx) ** 2 +
+                           (self.ball.y - pin_wy) ** 2)
+                / self.tile_sz * 10)
+
         from src.utils.sound_manager import SoundManager
         SoundManager.instance().play("swing")
 
@@ -450,6 +467,7 @@ class GolfRoundState:
             self.complete_timer = 0.0
             self._play_score_sound()
             self._resolve_skins_or_proam()
+            self._check_hole_achievements()
 
         # Stop the roll immediately if the ball enters heavy terrain
         if self.ball.state == BallState.ROLLING:
@@ -564,7 +582,8 @@ class GolfRoundState:
         bx = clamp(self.ball.x + math.cos(angle) * bounce_px, 0, world_w - 1)
         by = clamp(self.ball.y + math.sin(angle) * bounce_px, 0, world_h - 1)
         self.ball.hit(bx, by, is_putt=False)
-        self._bounce_in_progress = True
+        self._bounce_in_progress         = True
+        self._had_tree_bounce_this_hole  = True
 
     def _water_drop_pos(self):
         """
@@ -660,6 +679,25 @@ class GolfRoundState:
         elif fmt == FORMAT_PROAM:
             self._proam_team_score = t.get_proam_hole_score(self.strokes, self.hole_index)
 
+    def _check_hole_achievements(self):
+        """Called once when the ball enters the hole — detect per-hole achievements."""
+        player = self.game.player
+        if player is None:
+            return
+        # Hole-in-one
+        if self.strokes == 1:
+            player.hole_in_ones.append({
+                "hole_number": self.hole.number,
+                "course_name": self.course.name,
+                "season":      player.season,
+                "tour_level":  player.tour_level,
+            })
+            player.unlock_achievement("hole_in_one")
+        # Long putt (putter, distance > 35 yards before the shot)
+        if (self.current_club.name == "Putter"
+                and self._last_putt_distance_yards > 35):
+            player.unlock_achievement("long_putt")
+
     def _auto_select_club(self):
         terrain = self._ball_terrain()
         prev_idx = getattr(self, "club_idx", None)
@@ -727,6 +765,13 @@ class GolfRoundState:
         from src.states.round_summary   import RoundSummaryState
         from src.utils.sound_manager    import SoundManager
         SoundManager.instance().stop_ambient()
+
+        # Phase 6 — tree_par: hit trees this hole but still made par
+        if (self._had_tree_bounce_this_hole
+                and self.strokes <= self.hole.par
+                and self.game.player is not None):
+            self.game.player.unlock_achievement("tree_par")
+        self._had_tree_bounce_this_hole = False
 
         t = self.game.current_tournament
 
@@ -1166,8 +1211,25 @@ class GolfRoundState:
                          f"({'E' if total_diff == 0 else ('+' + str(total_diff) if total_diff > 0 else str(total_diff))})")
         self._blit_centred(surface, total_txt, self.font_med, (160, 200, 160), cx, 372)
 
-        # Format-specific info for this hole
+        # Phase 5 — rival position indicator
         t = self.game.current_tournament
+        rival_name = getattr(self.game.player, "rival_name", None) if self.game.player else None
+        if (rival_name and t is not None
+                and getattr(t, "format", "stroke") not in ("match", "skins")):
+            try:
+                all_sc = self.scores + [self.strokes]
+                rlb    = t.get_live_leaderboard(len(all_sc), all_sc)
+                rival_entry = next((e for e in rlb if e.get("name") == rival_name), None)
+                if rival_entry is not None:
+                    r_pos = rlb.index(rival_entry) + 1
+                    r_vp  = rival_entry.get("vs_par", 0)
+                    r_str = ("E" if r_vp == 0 else f"+{r_vp}" if r_vp > 0 else str(r_vp))
+                    rv_txt = f"★ Rival {rival_name}  P{r_pos}  ({r_str})"
+                    self._blit_centred(surface, rv_txt, self.font_med, (220, 140, 50), cx, 458)
+            except Exception:
+                pass
+
+        # Format-specific info for this hole
         if t is not None and getattr(t, "format", "stroke") == "stableford":
             from src.career.tournament import Tournament as _T
             pts = _T.stableford_points(diff)

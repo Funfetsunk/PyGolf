@@ -21,7 +21,7 @@ from src.career.player import Player
 from src.utils import web
 
 SAVE_DIR    = "saves"
-SAVE_FORMAT = 2   # v2: Phase 2 match play fields added
+SAVE_FORMAT = 5   # v5: Phase 6 extended achievements, course records, hole-in-ones, wins_per_tour
 
 # localStorage key prefix — namespaces our saves so we don't collide with
 # anything else on the same origin (e.g. if hosted alongside other apps).
@@ -147,7 +147,13 @@ def load_game(path: str):
         raise SaveVersionError(
             f"Save format v{version} is newer than this build (v{SAVE_FORMAT})."
         )
-    # v1 → v2 migration: Phase 1+2 fields default in from_dict; no data changes needed.
+    # v1 → v2: Phase 1+2 fields default in from_dict; no data changes needed.
+    # v2 → v3: Phase 4 fields (event_type, is_finale, season_schedule) default
+    #           in from_dict for both Player and Tournament; no data surgery needed.
+    # v3 → v4: Phase 5 fields (rival_name, reputation, narrative_events_seen, arcs)
+    #           default in Player.from_dict; no data surgery needed.
+    # v4 → v5: Phase 6 fields (wins_per_tour, course_records, hole_in_ones)
+    #           default in Player.from_dict; no data surgery needed.
 
     try:
         player = Player.from_dict(data["player"])

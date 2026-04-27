@@ -7,6 +7,7 @@ from src.golf.ball_types   import BALL_TYPES, BALL_ORDER
 from src.career.staff       import STAFF_TYPES
 from src.career.sponsorship import is_target_met
 from src.career.majors      import MAJOR_ORDER
+from src.data.schedule_data import generate_season_schedule
 
 NATIONALITIES = [
     "American", "English", "Scottish", "Irish", "Welsh",
@@ -23,22 +24,49 @@ STARTING_MONEY = 500
 
 # ── Achievements registry ─────────────────────────────────────────────────────
 ACHIEVEMENTS = {
-    "first_round":   {"label": "First Step",     "desc": "Play your first round"},
-    "first_subpar":  {"label": "Under Par",       "desc": "Finish a round under par"},
-    "first_top5":    {"label": "Top 5",           "desc": "Finish in the top 5"},
-    "first_win":     {"label": "Winner!",         "desc": "Win your first tournament"},
-    "challenger":    {"label": "Going Up",        "desc": "Reach the Challenger Tour"},
-    "going_pro":     {"label": "Turning Pro",     "desc": "Reach the Continental Tour"},
-    "grand_tour":    {"label": "Grand Stage",     "desc": "Reach the Grand Tour"},
-    "max_stat":      {"label": "Dedicated",       "desc": "Max out a stat to 80"},
-    "pro_clubs":     {"label": "Gear Up",         "desc": "Buy the Pro Set or better"},
-    "hired_staff":   {"label": "Team Player",     "desc": "Hire your first staff member"},
-    "millionaire":   {"label": "Millionaire",     "desc": "Earn $1,000,000 in career prize money"},
-    "veteran":       {"label": "Veteran",         "desc": "Play 50 events"},
-    "hat_trick":     {"label": "Hat Trick",       "desc": "Win 3 tournaments"},
-    "first_major":   {"label": "Major Winner",    "desc": "Win your first Major championship"},
-    "grand_slam":    {"label": "Grand Slam",      "desc": "Win all 4 Majors"},
-    "world_no1":     {"label": "World No. 1",     "desc": "Reach World Ranking #1"},
+    # ── Existing ──────────────────────────────────────────────────────────────
+    "first_round":      {"label": "First Step",       "desc": "Play your first round"},
+    "first_subpar":     {"label": "Under Par",         "desc": "Finish a round under par"},
+    "first_top5":       {"label": "Top 5",             "desc": "Finish in the top 5"},
+    "first_win":        {"label": "Winner!",           "desc": "Win your first tournament"},
+    "challenger":       {"label": "Going Up",          "desc": "Reach the Challenger Tour"},
+    "going_pro":        {"label": "Turning Pro",       "desc": "Reach the Continental Tour"},
+    "grand_tour":       {"label": "Grand Stage",       "desc": "Reach the Grand Tour"},
+    "max_stat":         {"label": "Dedicated",         "desc": "Max out a stat to 80"},
+    "pro_clubs":        {"label": "Gear Up",           "desc": "Buy the Pro Set or better"},
+    "hired_staff":      {"label": "Team Player",       "desc": "Hire your first staff member"},
+    "millionaire":      {"label": "Millionaire",       "desc": "Earn $1,000,000 in career prize money"},
+    "veteran":          {"label": "Veteran",           "desc": "Play 50 events"},
+    "hat_trick":        {"label": "Hat Trick",         "desc": "Win 3 tournaments"},
+    "first_major":      {"label": "Major Winner",      "desc": "Win your first Major championship"},
+    "grand_slam":       {"label": "Grand Slam",        "desc": "Win all 4 Majors"},
+    "world_no1":        {"label": "World No. 1",       "desc": "Reach World Ranking #1"},
+    # ── Scoring ───────────────────────────────────────────────────────────────
+    "first_birdie":     {"label": "First Birdie",      "desc": "Score your first birdie"},
+    "first_eagle":      {"label": "Eagle Eye",         "desc": "Score your first eagle"},
+    "hole_in_one":      {"label": "Ace!",              "desc": "Score a hole-in-one"},
+    "break_70":         {"label": "Below 70",          "desc": "Shoot under 70 for a round"},
+    "break_65":         {"label": "Elite Round",       "desc": "Shoot under 65 for a round"},
+    "bogey_free":       {"label": "Bogey Free",        "desc": "Complete a round without a bogey"},
+    "five_birdies_run": {"label": "On Fire",           "desc": "Make 5 birdies in a row"},
+    # ── Career ────────────────────────────────────────────────────────────────
+    "win_all_tours":    {"label": "Tour Conqueror",    "desc": "Win an event on every tour level"},
+    "win_major":        {"label": "Major Champion",    "desc": "Win any Major championship"},
+    "centurion":        {"label": "Centurion",         "desc": "Play 100 events"},
+    # ── Formats ───────────────────────────────────────────────────────────────
+    "win_match_play":   {"label": "Closer",            "desc": "Win a Match Play Championship"},
+    "win_skins":        {"label": "Skin Collector",    "desc": "Win a Skins event"},
+    "win_stableford":   {"label": "Points Wizard",     "desc": "Win a Stableford event"},
+    # ── Adversity ─────────────────────────────────────────────────────────────
+    "comeback_win":     {"label": "The Comeback",      "desc": "Win after being 5+ strokes down in round 2"},
+    "long_putt":        {"label": "Long Range",        "desc": "Hole a putt from over 35 yards"},
+    "tree_par":         {"label": "Timber!",           "desc": "Escape from trees and still make par"},
+    "rain_win":         {"label": "All Weather",       "desc": "Win an event played in rain"},
+    # ── Skills ────────────────────────────────────────────────────────────────
+    "skills_long_drive":{"label": "Big Hitter",        "desc": "Win the Long Drive Competition"},
+    "skills_cttp":      {"label": "Pin Seeker",        "desc": "Win Closest to the Pin"},
+    # ── Rival ─────────────────────────────────────────────────────────────────
+    "beat_rival_major": {"label": "Rivalry Settled",   "desc": "Beat your rival in a Major"},
 }
 
 
@@ -100,6 +128,29 @@ class Player:
         # a "try this course" round doesn't overwrite real career saves.
         # Not persisted — only set at runtime by the course-picker flow.
         self.practice_mode: bool = False
+
+        # Phase 4 — season schedule (event slots for the current season)
+        self.season_schedule: list[dict] = generate_season_schedule(1, 1)
+
+        # Phase 6 — extended stats
+        self.wins_per_tour:   dict[int, int] = {}
+        self.course_records:  dict[str, int] = {}
+        self.hole_in_ones:    list[dict]     = []
+
+        # Phase 5 — rival tracker
+        self.rival_name: str | None = None
+        self.rival_head_to_head: dict = {"wins": 0, "losses": 0, "halved": 0}
+        self.close_finishes: dict[str, int] = {}
+
+        # Phase 5 — narrative / reputation
+        self.narrative_events_seen: list[str] = []
+        self.reputation: int = 0
+        self.temp_stat_modifiers: dict[str, int] = {}
+        self.slump_objective: dict | None = None
+
+        # Phase 5 — season arc
+        self.current_arc_id: str | None = None
+        self.arc_completed: bool = False
 
     @property
     def clubs(self):
@@ -236,18 +287,96 @@ class Player:
 
     # ── Career tracking ───────────────────────────────────────────────────────
 
-    def log_round(self, course_name: str, strokes: int, par: int) -> None:
+    def unlock_achievement(self, key: str) -> bool:
+        """Add achievement key if not already present. Returns True if newly unlocked."""
+        if key not in self.achievements and key in ACHIEVEMENTS:
+            self.achievements.append(key)
+            return True
+        return False
+
+    def log_round(self, course_name: str, strokes: int, par: int,
+                  hole_scores: list[int] | None = None,
+                  hole_pars: list[int] | None = None) -> None:
         diff = strokes - par
-        self.career_log.append({
+        entry: dict = {
             "course":  course_name,
             "strokes": strokes,
             "par":     par,
             "diff":    diff,
-        })
+        }
+        if hole_scores is not None:
+            entry["hole_scores"] = list(hole_scores)
+        if hole_pars is not None:
+            entry["hole_pars"] = list(hole_pars)
+
+        # Per-hole analysis for achievements
+        if hole_scores is not None and hole_pars is not None:
+            diffs = [s - p for s, p in zip(hole_scores, hole_pars)]
+            if all(d <= 0 for d in diffs):
+                entry["bogey_free"] = True
+            run = best_run = 0
+            for d in diffs:
+                if d < 0:
+                    run     += 1
+                    best_run = max(best_run, run)
+                else:
+                    run = 0
+            if best_run >= 5:
+                entry["five_birdie_run"] = True
+
+        self.career_log.append(entry)
         self.events_played += 1
         if self.best_round is None or diff < self.best_round:
             self.best_round = diff
+
+        # Course record
+        prev = self.course_records.get(course_name, 9999)
+        if strokes < prev:
+            self.course_records[course_name] = strokes
+            if prev < 9999:
+                entry["new_course_record"] = True
+
         self._check_achievements()
+
+    def check_rival(self, leaderboard: list[dict]) -> None:
+        """Increment close_finishes for opponents within 3 strokes; set rival_name
+        once any opponent reaches 5 close finishes and no rival is yet set."""
+        player_entry = next((e for e in leaderboard if e.get("is_player")), None)
+        if player_entry is None:
+            return
+        player_vp = player_entry.get("vs_par", 0)
+        for entry in leaderboard:
+            if entry.get("is_player"):
+                continue
+            name = entry.get("name", "")
+            if not name:
+                continue
+            diff = abs(entry.get("vs_par", 0) - player_vp)
+            if diff <= 3:
+                self.close_finishes[name] = self.close_finishes.get(name, 0) + 1
+                if self.rival_name is None and self.close_finishes[name] >= 5:
+                    self.rival_name = name
+
+    def update_head_to_head(self, leaderboard: list[dict]) -> None:
+        """Update head-to-head record against the current rival."""
+        if not self.rival_name:
+            return
+        player_entry = next((e for e in leaderboard if e.get("is_player")), None)
+        rival_entry  = next((e for e in leaderboard
+                             if e.get("name") == self.rival_name), None)
+        if player_entry is None or rival_entry is None:
+            return
+        p_pos = leaderboard.index(player_entry) + 1
+        r_pos = leaderboard.index(rival_entry)  + 1
+        if p_pos < r_pos:
+            self.rival_head_to_head["wins"]   = self.rival_head_to_head.get("wins",   0) + 1
+        elif p_pos > r_pos:
+            self.rival_head_to_head["losses"] = self.rival_head_to_head.get("losses", 0) + 1
+        else:
+            self.rival_head_to_head["halved"] = self.rival_head_to_head.get("halved", 0) + 1
+
+    def gain_reputation(self, amount: int) -> None:
+        self.reputation = min(100, self.reputation + amount)
 
     def apply_tournament_result(self, tournament) -> dict:
         # Logic lives in CareerService so the rankings/staff imports it
@@ -261,6 +390,10 @@ class Player:
         self.season_points      = 0
         self.events_this_season = 0
         self.opp_season_points  = {}
+        self.season_schedule    = generate_season_schedule(self.tour_level, self.season)
+        self.arc_completed      = False
+        from src.data.narrative_events import get_arc_id
+        self.current_arc_id = get_arc_id(self.tour_level, self.season)
 
     def earn_money(self, amount: int) -> None:
         self.money += amount
@@ -281,9 +414,10 @@ class Player:
     def _check_achievements(self) -> None:
         """Unlock any achievements whose conditions are now met."""
         def unlock(key):
-            if key not in self.achievements:
+            if key not in self.achievements and key in ACHIEVEMENTS:
                 self.achievements.append(key)
 
+        # ── Existing ──────────────────────────────────────────────────────────
         if self.events_played >= 1:
             unlock("first_round")
         if self.best_round is not None and self.best_round < 0:
@@ -313,10 +447,39 @@ class Player:
             unlock("veteran")
         if len(self.majors_won) >= 1:
             unlock("first_major")
+            unlock("win_major")
         if len(self.majors_won) >= 4:
             unlock("grand_slam")
         if self.world_rank == 1:
             unlock("world_no1")
+
+        # ── Scoring ───────────────────────────────────────────────────────────
+        for entry in self.career_log:
+            hs = entry.get("hole_scores")
+            hp = entry.get("hole_pars")
+            if hs and hp:
+                diffs = [s - p for s, p in zip(hs, hp)]
+                if any(d <= -1 for d in diffs):
+                    unlock("first_birdie")
+                if any(d <= -2 for d in diffs):
+                    unlock("first_eagle")
+            if entry.get("bogey_free"):
+                unlock("bogey_free")
+            if entry.get("five_birdie_run"):
+                unlock("five_birdies_run")
+            s = entry.get("strokes", 9999)
+            if s < 70:
+                unlock("break_70")
+            if s < 65:
+                unlock("break_65")
+        if self.hole_in_ones:
+            unlock("hole_in_one")
+
+        # ── Career ────────────────────────────────────────────────────────────
+        if self.events_played >= 100:
+            unlock("centurion")
+        if len(self.wins_per_tour) >= 6:
+            unlock("win_all_tours")
 
     # ── Serialisation ─────────────────────────────────────────────────────────
 
@@ -354,6 +517,21 @@ class Player:
             "tutorial_seen":                self.tutorial_seen,
             "owned_balls":                  list(self.owned_balls),
             "ball_type":                    self.ball_type,
+            # Phase 4
+            "season_schedule":              list(self.season_schedule),
+            # Phase 6
+            "wins_per_tour":           dict(self.wins_per_tour),
+            "course_records":          dict(self.course_records),
+            "hole_in_ones":            list(self.hole_in_ones),
+            # Phase 5
+            "rival_name":              self.rival_name,
+            "rival_head_to_head":      dict(self.rival_head_to_head),
+            "close_finishes":          dict(self.close_finishes),
+            "narrative_events_seen":   list(self.narrative_events_seen),
+            "reputation":              self.reputation,
+            "slump_objective":         self.slump_objective,
+            "current_arc_id":          self.current_arc_id,
+            "arc_completed":           self.arc_completed,
         }
 
     @classmethod
@@ -390,4 +568,26 @@ class Player:
         p.ball_type                    = data.get("ball_type", "range")
         if p.ball_type not in p.owned_balls:
             p.ball_type = "range"
+        # Phase 4 — rebuild schedule for old saves that lack it
+        p.season_schedule = data.get("season_schedule", [])
+        if not p.season_schedule:
+            p.season_schedule = generate_season_schedule(p.tour_level, p.season)
+        # Phase 6
+        p.wins_per_tour   = data.get("wins_per_tour",  {})
+        p.course_records  = data.get("course_records", {})
+        p.hole_in_ones    = data.get("hole_in_ones",   [])
+        # Phase 5
+        p.rival_name             = data.get("rival_name", None)
+        p.rival_head_to_head     = data.get("rival_head_to_head",
+                                            {"wins": 0, "losses": 0, "halved": 0})
+        p.close_finishes         = data.get("close_finishes", {})
+        p.narrative_events_seen  = data.get("narrative_events_seen", [])
+        p.reputation             = data.get("reputation", 0)
+        p.temp_stat_modifiers    = {}   # never persisted — reset each session
+        p.slump_objective        = data.get("slump_objective", None)
+        p.current_arc_id         = data.get("current_arc_id", None)
+        p.arc_completed          = data.get("arc_completed", False)
+        if p.current_arc_id is None:
+            from src.data.narrative_events import get_arc_id
+            p.current_arc_id = get_arc_id(p.tour_level, p.season)
         return p

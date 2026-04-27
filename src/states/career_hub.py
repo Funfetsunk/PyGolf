@@ -15,7 +15,8 @@ import pygame
 from src.golf.club        import CLUB_SETS, CLUB_SET_ORDER
 from src.golf.ball_types  import BALL_TYPES, BALL_ORDER, effect_summary as ball_effect_summary
 from src.career.player    import STAT_KEYS, BASE_STAT, MAX_STAT, ACHIEVEMENTS
-from src.career.tournament import TOUR_DISPLAY_NAMES, EVENTS_PER_SEASON
+from src.career.tournament import (TOUR_DISPLAY_NAMES, EVENTS_PER_SEASON,
+                                   TOUR_CHAMPIONSHIP_QUALIFIERS)
 from src.career.staff      import STAFF_TYPES, STAFF_ORDER
 from src.career.sponsorship import get_available_sponsors, is_target_met, progress_label
 from src.constants          import SCREEN_W, SCREEN_H
@@ -81,6 +82,40 @@ STAT_LABELS = {
     "mental":     "Mental",
     "fitness":    "Fitness",
 }
+
+_TOUR_SHORT = {1: "Amateur", 2: "Challenger", 3: "Development",
+               4: "Continental", 5: "World", 6: "Grand"}
+
+
+def _ordinal(n: int) -> str:
+    suffix = {1: "st", 2: "nd", 3: "rd"}.get(
+        n % 10 if n % 100 not in (11, 12, 13) else 0, "th")
+    return f"{n}{suffix}"
+
+
+def _event_name(event_n: int, event_type: str, tour_level: int) -> str:
+    tour = _TOUR_SHORT.get(tour_level, "Tour")
+    if event_type == "championship":
+        return f"{tour} Tour Championship"
+    if event_type == "matchplay":
+        return f"Event {event_n} — {tour} Match Play Championship"
+    if event_type == "skins":
+        return f"Event {event_n} — {tour} Skins Game"
+    if event_type == "stableford":
+        return f"Event {event_n} — {tour} Stableford"
+    if event_type == "proam":
+        return f"Event {event_n} — {tour} Pro-Am"
+    return f"Event {event_n} — {tour} Circuit"
+
+
+def _championship_offsets(player, opps: list) -> dict[str, int]:
+    """Top 3 in current season standings get -3/-2/-1 starting offset."""
+    standings = [(player.season_points, "You")]
+    for opp in opps:
+        standings.append((player.opp_season_points.get(opp.name, 0), opp.name))
+    standings.sort(key=lambda x: -x[0])
+    return {name: offset
+            for offset, (_, name) in zip((-3, -2, -1), standings[:3])}
 
 TAB_LABELS = ["Training & Equipment", "Staff", "Sponsors", "Career Stats"]
 
@@ -359,23 +394,21 @@ class CareerHubState:
         from src.states.golf_round import GolfRoundState
         from src.career.tournament import Tournament, EVENTS_PER_SEASON
         from src.data.opponents_data import get_opponent_pool
-        from src.career.majors import is_major_event, get_major_course, MAJORS
+        from src.career.majors import get_major_course, MAJORS
         import random
 
         p = self.player
 
         # ── Q-School Qualifier ────────────────────────────────────────────────
         if p.qschool_pending:
-            courses = get_courses_for_tour(get_tour_id(5))   # World Tour courses
+            courses = get_courses_for_tour(get_tour_id(5))
             if not courses:
                 courses = get_courses_for_tour(get_tour_id(4))
             if not courses:
                 self._flash("No course available for Q-School!")
                 return
             course = random.choice(courses)
-            opps   = get_opponent_pool(5)   # tougher World Tour field
-            # Seed differs per attempt so the second Q-School isn't a replay
-            # of the first — but still reproducible from the save file.
+            opps   = get_opponent_pool(5)
             attempt_idx = max(0, 2 - p.qschool_attempts_remaining)
             qs_seed = hash((p.name, p.season, "qschool", attempt_idx)) & 0xFFFFFFFF
             t = Tournament(
@@ -384,7 +417,8 @@ class CareerHubState:
                 opps, is_qschool=True,
                 event_number=1, total_events=1,
                 rng_seed=qs_seed,
-                course_name=course.name)
+                course_name=course.name,
+                event_type="qschool")
             p.qschool_pending = False
             if p.qschool_attempts_remaining > 0:
                 p.qschool_attempts_remaining -= 1
@@ -392,76 +426,84 @@ class CareerHubState:
             self.game.change_state(GolfRoundState(self.game, course, 0, []))
             return
 
-        # ── Normal event ──────────────────────────────────────────────────────
-        tour_id = get_tour_id(p.tour_level)
-        total   = EVENTS_PER_SEASON.get(p.tour_level, 8)
-        event_n = p.events_this_season + 1
+        # ── Normal event — read slot from season schedule ─────────────────────
+        tour_id   = get_tour_id(p.tour_level)
+        total     = EVENTS_PER_SEASON.get(p.tour_level, 8)
+        event_idx = p.events_this_season
+        event_n   = event_idx + 1
 
-        # Check if this event is a Major
-        major_id = is_major_event(p.tour_level, event_n)
+        schedule = p.season_schedule
+        slot = (schedule[event_idx]
+                if schedule and event_idx < len(schedule)
+                else {"event_type": "regular", "format": "stroke",
+                      "is_opener": False, "is_finale": False,
+                      "is_major": False, "major_id": None})
 
-        if major_id:
+        is_major   = slot.get("is_major", False)
+        major_id   = slot.get("major_id") if is_major else None
+        is_finale  = slot.get("is_finale", False)
+        is_opener  = slot.get("is_opener", False)
+        event_type = slot.get("event_type", "regular")
+        fmt        = slot.get("format", "stroke")
+
+        # ── Tour Championship qualification check ─────────────────────────────
+        if is_finale:
+            qualifier_count  = TOUR_CHAMPIONSHIP_QUALIFIERS.get(p.tour_level, 15)
+            opponents_ahead  = sum(
+                1 for pts in p.opp_season_points.values() if pts > p.season_points)
+            if opponents_ahead >= qualifier_count:
+                player_pos = opponents_ahead + 1
+                # Season ends without the finale — mark complete and go to standings
+                p.events_this_season = total
+                from src.states.tour_standings import TourStandingsState
+                self.game.change_state(
+                    TourStandingsState(self.game, missed_championship=True,
+                                       missed_pos=player_pos))
+                return
+
+        # ── Course selection ──────────────────────────────────────────────────
+        course = None
+        if is_major:
             course = get_major_course(major_id)
             if course is None:
-                self._flash("Major course not found — using random course.")
-                major_id = None
-        if not major_id or course is None:
+                is_major  = False
+                major_id  = None
+                event_type = "regular"
+                fmt        = "stroke"
+        if course is None:
             courses = get_courses_for_tour(tour_id)
             if not courses:
                 self._flash("No courses found for this tour!")
                 return
             course = random.choice(courses)
 
-        opps = get_opponent_pool(p.tour_level)
-
+        opps    = get_opponent_pool(p.tour_level)
         ev_seed = hash((p.name, p.season, p.tour_level,
                         event_n, major_id or "")) & 0xFFFFFFFF
 
-        if major_id:
-            name = MAJORS[major_id]["name"]
+        if is_major:
+            name       = MAJORS[major_id]["name"]
             prize_fund = MAJORS[major_id]["prize_fund"]
             t = Tournament(
                 name, p.tour_level,
                 [course.get_hole(i).par for i in range(course.total_holes)],
                 opps, is_major=True, event_number=event_n, total_events=total,
                 major_id=major_id, major_prize_fund=prize_fund,
-                rng_seed=ev_seed, course_name=course.name)
+                rng_seed=ev_seed, course_name=course.name,
+                event_type="major", is_finale=is_finale)
         else:
-            _NAMES = {1: "Amateur", 2: "Challenger", 3: "Development",
-                      4: "Continental", 5: "World", 6: "Grand"}
-            # Format selection — fixed event slots per season:
-            #   event 1:  Pro-Am opener (all tours)
-            #   event 5:  Match Play Championship (tour 2+)
-            #   event 8:  Skins Game (tour 2+)
-            #   event N where N%4==3: Stableford (tour 2+, not already taken)
-            #   all others: stroke play
-            _is_matchplay  = (p.tour_level >= 2 and event_n == 5)
-            _is_skins      = (p.tour_level >= 2 and event_n == 8)
-            _is_stableford = (not _is_matchplay and not _is_skins
-                              and p.tour_level >= 2 and event_n % 4 == 3)
-            _is_proam      = (not _is_matchplay and not _is_skins
-                              and not _is_stableford and event_n == 1)
-            if _is_matchplay:
-                _fmt = "match"
-                name = f"Event {event_n} — {_NAMES.get(p.tour_level, 'Tour')} Match Play Championship"
-            elif _is_skins:
-                _fmt = "skins"
-                name = f"Event {event_n} — {_NAMES.get(p.tour_level, 'Tour')} Skins Game"
-            elif _is_stableford:
-                _fmt = "stableford"
-                name = f"Event {event_n} — {_NAMES.get(p.tour_level, 'Tour')} Stableford"
-            elif _is_proam:
-                _fmt = "proam"
-                name = f"Event {event_n} — {_NAMES.get(p.tour_level, 'Tour')} Pro-Am"
-            else:
-                _fmt = "stroke"
-                name = f"Event {event_n} — {_NAMES.get(p.tour_level, 'Tour')} Circuit"
+            name = _event_name(event_n, event_type, p.tour_level)
+            score_offset = {}
+            if is_finale:
+                score_offset = _championship_offsets(p, opps)
             t = Tournament(
                 name, p.tour_level,
                 [course.get_hole(i).par for i in range(course.total_holes)],
                 opps, is_major=False, event_number=event_n, total_events=total,
                 rng_seed=ev_seed, course_name=course.name,
-                format=_fmt)
+                format=fmt, event_type=event_type,
+                is_opener=is_opener, is_finale=is_finale,
+                starting_score_offset=score_offset)
 
         self.game.current_tournament = t
         self.game.change_state(GolfRoundState(self.game, course, 0, []))
@@ -512,6 +554,33 @@ class CareerHubState:
             ach_id = self._new_achievements.pop(0)
             info   = ACHIEVEMENTS.get(ach_id, {})
             self._flash(f"Achievement unlocked: {info.get('label', ach_id)}!")
+
+        # Phase 5 — trigger the first pending narrative event (once per visit).
+        if not getattr(self, "_narrative_checked", False):
+            self._narrative_checked = True
+            self._check_narrative_events()
+
+    def _check_narrative_events(self):
+        """Push the first untriggered narrative event modal, if any."""
+        p = self.player
+        if p is None:
+            return
+        try:
+            from src.data.narrative_events import NARRATIVE_EVENTS
+            from src.states.narrative_event_state import NarrativeEventState
+            seen = set(getattr(p, "narrative_events_seen", []))
+            for ev in NARRATIVE_EVENTS:
+                if ev["id"] in seen:
+                    continue
+                try:
+                    triggered = ev["trigger"](p)
+                except Exception:
+                    triggered = False
+                if triggered:
+                    self.game.change_state(NarrativeEventState(self.game, ev))
+                    return
+        except Exception:
+            pass
 
     # ── Draw ──────────────────────────────────────────────────────────────────
 
@@ -674,12 +743,19 @@ class CareerHubState:
         cx = r.x + r.width // 2
         ty = r.y + 52
 
-        event_n    = p.events_this_season + 1
+        event_idx  = p.events_this_season
+        event_n    = event_idx + 1
         total_evts = EVENTS_PER_SEASON.get(p.tour_level, 8)
         tour_name  = TOUR_DISPLAY_NAMES.get(p.tour_level, "Tour")
 
-        from src.career.majors import is_major_event, MAJORS
-        major_id = is_major_event(p.tour_level, event_n)
+        from src.career.majors import MAJORS
+        schedule = p.season_schedule
+        slot = (schedule[event_idx]
+                if schedule and event_idx < len(schedule) else {})
+        _major    = slot.get("is_major", False)
+        _major_id = slot.get("major_id") if _major else None
+        _finale   = slot.get("is_finale", False)
+        _etype    = slot.get("event_type", "regular")
 
         if p.qschool_pending:
             qs = self.font_title.render("Q-School Qualifier", True, C_GOLD)
@@ -691,8 +767,8 @@ class CareerHubState:
             en = self.font_title.render(f"Event {event_n} of {total_evts}", True, C_WHITE)
             surface.blit(en, (cx - en.get_width() // 2, ty)); ty += 44
 
-        if not p.qschool_pending and major_id:
-            major_info = MAJORS[major_id]
+        if not p.qschool_pending and _major and _major_id:
+            major_info = MAJORS[_major_id]
             ms = self.font_hdr.render(
                 f"★ MAJOR: {major_info['name']}", True, C_GOLD)
             surface.blit(ms, (cx - ms.get_width() // 2, ty)); ty += 24
@@ -700,15 +776,29 @@ class CareerHubState:
                 f"Prize fund: ${major_info['prize_fund']:,}  •  2 rounds", True, C_GOLD)
             surface.blit(mc, (cx - mc.get_width() // 2, ty)); ty += 20
 
-        # Format badge for special events
-        if not p.qschool_pending and not major_id:
-            _is_matchplay  = (p.tour_level >= 2 and event_n == 5)
-            _is_skins      = (p.tour_level >= 2 and event_n == 8)
-            _is_stableford = (not _is_matchplay and not _is_skins
-                              and p.tour_level >= 2 and event_n % 4 == 3)
-            _is_proam      = (not _is_matchplay and not _is_skins
-                              and not _is_stableford and event_n == 1)
-            if _is_matchplay:
+        # Format / event-type badge
+        if not p.qschool_pending and not _major:
+            if _finale:
+                tc_lbl = self.font_hdr.render(
+                    "SEASON FINALE: Tour Championship", True, C_GOLD)
+                surface.blit(tc_lbl, (cx - tc_lbl.get_width() // 2, ty)); ty += 22
+                # Qualification status
+                qualifier_count = TOUR_CHAMPIONSHIP_QUALIFIERS.get(p.tour_level, 15)
+                opponents_ahead = sum(
+                    1 for pts in p.opp_season_points.values()
+                    if pts > p.season_points)
+                player_pos = opponents_ahead + 1
+                qualified  = opponents_ahead < qualifier_count
+                if qualified:
+                    qs_lbl = self.font_small.render(
+                        f"Qualified — currently {_ordinal(player_pos)} "
+                        f"({qualifier_count} qualify)", True, C_GREEN)
+                else:
+                    qs_lbl = self.font_small.render(
+                        f"Not qualified — {_ordinal(player_pos)}, "
+                        f"need top {qualifier_count}", True, C_RED)
+                surface.blit(qs_lbl, (cx - qs_lbl.get_width() // 2, ty)); ty += 20
+            elif _etype == "matchplay":
                 mp_lbl = self.font_hdr.render(
                     "FORMAT: Match Play Championship", True, (80, 140, 220))
                 surface.blit(mp_lbl, (cx - mp_lbl.get_width() // 2, ty)); ty += 22
@@ -716,7 +806,7 @@ class CareerHubState:
                     "Win holes to advance through the bracket",
                     True, (120, 160, 200))
                 surface.blit(mp_sub, (cx - mp_sub.get_width() // 2, ty)); ty += 20
-            elif _is_skins:
+            elif _etype == "skins":
                 sk_lbl = self.font_hdr.render(
                     "FORMAT: Skins Game", True, (220, 160, 50))
                 surface.blit(sk_lbl, (cx - sk_lbl.get_width() // 2, ty)); ty += 22
@@ -724,11 +814,11 @@ class CareerHubState:
                     "Beat all 3 opponents on a hole to win the skin",
                     True, (200, 170, 100))
                 surface.blit(sk_sub, (cx - sk_sub.get_width() // 2, ty)); ty += 20
-            elif _is_stableford:
+            elif _etype == "stableford":
                 sb_lbl = self.font_hdr.render(
                     "FORMAT: Stableford", True, (80, 180, 120))
                 surface.blit(sb_lbl, (cx - sb_lbl.get_width() // 2, ty)); ty += 22
-            elif _is_proam:
+            elif _etype == "proam":
                 pa_lbl = self.font_hdr.render(
                     "FORMAT: Pro-Am", True, (100, 200, 230))
                 surface.blit(pa_lbl, (cx - pa_lbl.get_width() // 2, ty)); ty += 22
@@ -765,6 +855,24 @@ class CareerHubState:
         ci = self.font_med.render(f"Clubs: {club_lbl}", True, C_GOLD)
         surface.blit(ci, (r.x + 40, ty)); ty += 24
 
+        # Course record for the upcoming event
+        try:
+            from src.data.tours_data import get_courses_for_tour
+            from src.career.tour import get_tour_id
+            _tid = get_tour_id(p.tour_level)
+            _courses = get_courses_for_tour(_tid)
+            if _courses:
+                _recs = getattr(p, "course_records", {})
+                _rec_lines = [(c.name, _recs[c.name]) for c in _courses
+                              if c.name in _recs]
+                if _rec_lines:
+                    for _cname, _best in _rec_lines[:2]:
+                        cr_s = self.font_small.render(
+                            f"Your record on {_cname}: {_best}", True, C_GOLD)
+                        surface.blit(cr_s, (r.x + 40, ty)); ty += 16
+        except Exception:
+            pass
+
         # World ranking
         if p.world_ranking_points > 0:
             from src.career.rankings import rank_label
@@ -782,6 +890,35 @@ class CareerHubState:
                 s = self.font_small.render("  " + text, True, col)
                 surface.blit(s, (r.x + 40, ty)); ty += 16
 
+        # Season arc
+        try:
+            from src.data.narrative_events import get_arc
+            arc = get_arc(getattr(p, "current_arc_id", None))
+            if arc:
+                arc_col = C_GREEN if getattr(p, "arc_completed", False) else C_GOLD
+                arc_lbl = arc["title"] + (" ✓" if getattr(p, "arc_completed", False) else "")
+                al = self.font_small.render(f"Arc: {arc_lbl}", True, arc_col)
+                surface.blit(al, (r.x + 40, ty)); ty += 16
+                obj_s = self.font_small.render(arc["objective"], True, C_GRAY)
+                surface.blit(obj_s, (r.x + 40, ty)); ty += 18
+        except Exception:
+            pass
+
+        # Rival in the field notice
+        rival_name = getattr(p, "rival_name", None)
+        if rival_name and not p.qschool_pending:
+            try:
+                from src.data.opponents_data import get_opponent_pool
+                opps = get_opponent_pool(p.tour_level)
+                if any(o.name == rival_name for o in opps):
+                    rv_lbl = self.font_small.render(
+                        f"★ Rival {rival_name} is in the field this week.",
+                        True, (220, 140, 50))
+                    surface.blit(rv_lbl, (r.x + 40, ty)); ty += 18
+            except Exception:
+                pass
+
+        ty += 4
         # Active sponsor
         if p.active_sponsor:
             sp_name = p.active_sponsor["name"]
@@ -978,7 +1115,7 @@ class CareerHubState:
         pygame.draw.rect(surface, C_BORDER, r_list, 1, border_radius=6)
         self._section_hdr(surface, "AVAILABLE SPONSORS", r_list.x, r_list.y, r_list.width)
 
-        available = get_available_sponsors(p.tour_level)
+        available = get_available_sponsors(p.tour_level, getattr(p, "reputation", 0))
         self._sponsor_btns = []
         sy = r_list.y + 46
         row_h = 90
@@ -1083,24 +1220,47 @@ class CareerHubState:
         p  = self.player
         cy = CONTENT_Y
 
-        # ── Stats column (left) ───────────────────────────────────────────────
-        stats_r = pygame.Rect(CONTENT_X, cy, 500, CONTENT_H)
+        # ── Column layout ─────────────────────────────────────────────────────
+        # Left: stats (x=15, w=440)
+        # Middle: achievements 2-col (x=465, w=490)
+        # Right: records + milestones (x=965, w=300)
+        stats_r   = pygame.Rect(CONTENT_X,        cy, 440, CONTENT_H)
+        ach_r     = pygame.Rect(CONTENT_X + 450,  cy, 490, CONTENT_H)
+        records_r = pygame.Rect(CONTENT_X + 950,  cy, CONTENT_W - 950, CONTENT_H)
+
+        # ── Stats column ──────────────────────────────────────────────────────
         pygame.draw.rect(surface, C_PANEL, stats_r, border_radius=6)
         pygame.draw.rect(surface, C_BORDER, stats_r, 1, border_radius=6)
         self._section_hdr(surface, "CAREER STATISTICS", stats_r.x, stats_r.y, stats_r.width)
+
+        from src.career.rankings import rank_label
+        from src.career.majors import MAJORS, MAJOR_ORDER
 
         tour_name  = TOUR_DISPLAY_NAMES.get(p.tour_level, "Tour")
         best_str   = ("—" if p.best_round is None else
                       f"{p.best_round:+d}" if p.best_round != 0 else "E")
         staff_s    = f"{len(p.hired_staff)} hired" if p.hired_staff else "None"
-        sponsor_s  = (p.active_sponsor["name"]
-                      if p.active_sponsor else "None")
-
-        from src.career.rankings import rank_label
-        from src.career.majors import MAJORS, MAJOR_ORDER
+        sponsor_s  = (p.active_sponsor["name"] if p.active_sponsor else "None")
         majors_str = ", ".join(
             MAJORS[m]["short_name"] for m in MAJOR_ORDER if m in p.majors_won
         ) or "None"
+        rival_name = getattr(p, "rival_name", None)
+        h2h        = getattr(p, "rival_head_to_head",
+                             {"wins": 0, "losses": 0, "halved": 0})
+        rival_str  = (f"{rival_name}  "
+                      f"W{h2h.get('wins',0)}-L{h2h.get('losses',0)}-H{h2h.get('halved',0)}"
+                      if rival_name else "None")
+
+        # Average score vs par
+        log = p.career_log or []
+        avg_str = "—"
+        if log:
+            avg_diff = sum(e.get("diff", 0) for e in log) / len(log)
+            avg_str  = f"{avg_diff:+.1f}" if avg_diff != 0 else "E"
+
+        # Hole-in-ones
+        hio_list  = getattr(p, "hole_in_ones", [])
+        hio_count = len(hio_list)
 
         rows = [
             ("Name",           p.name),
@@ -1109,56 +1269,140 @@ class CareerHubState:
             ("Season",         str(p.season)),
             ("World Ranking",  rank_label(p.world_rank)),
             ("Ranking Points", f"{p.world_ranking_points:.0f}"),
-            ("Majors Won",     f"{len(p.majors_won)}/4"),
-            ("",               majors_str[:30]),   # truncate long lists
+            ("Majors Won",     f"{len(p.majors_won)}/4  {majors_str[:22]}"),
             ("Events Played",  str(p.events_played)),
             ("Career Wins",    str(p.career_wins)),
             ("Top-5 Finishes", str(p.career_top5)),
             ("Top-10 Finishes",str(p.career_top10)),
             ("Best Round",     best_str),
+            ("Avg vs Par",     avg_str),
             ("Career Earnings",f"${p.total_earnings:,}"),
             ("Current Money",  f"${p.money:,}"),
             ("Club Set",       CLUB_SETS[p.club_set_name]["label"]),
             ("Staff",          staff_s),
             ("Sponsor",        sponsor_s),
+            ("Rival",          rival_str),
+            ("Hole-in-Ones",   str(hio_count)),
         ]
-        ty = stats_r.y + 46
+        ty  = stats_r.y + 46
+        lx  = stats_r.x + 10
+        vx  = stats_r.x + 210
         for label, val in rows:
-            ls = self.font_med.render(label + ":", True, C_GRAY)
-            vs = self.font_med.render(val,         True, C_WHITE)
-            surface.blit(ls, (stats_r.x + 12, ty))
-            surface.blit(vs, (stats_r.x + 230, ty))
-            ty += 24
+            ls = self.font_small.render(label + ":", True, C_GRAY)
+            vs = self.font_small.render(val,         True, C_WHITE)
+            surface.blit(ls, (lx, ty))
+            surface.blit(vs, (vx, ty))
+            ty += 20
 
-        # ── Achievements column (right) ───────────────────────────────────────
-        ach_x  = CONTENT_X + 520
-        ach_w  = CONTENT_W - 520
-        ach_r  = pygame.Rect(ach_x, cy, ach_w, CONTENT_H)
+        # Reputation bar
+        rep = getattr(p, "reputation", 0)
+        ty += 4
+        rep_lbl = self.font_small.render("Reputation:", True, C_GRAY)
+        surface.blit(rep_lbl, (lx, ty))
+        rep_val = self.font_small.render(f"{rep} / 100", True,
+                                         C_GOLD if rep >= 50 else C_WHITE)
+        surface.blit(rep_val, (vx, ty)); ty += 16
+        bar_x, bar_w, bar_h = lx, 180, 7
+        pygame.draw.rect(surface, (38, 50, 38),
+                         pygame.Rect(bar_x, ty, bar_w, bar_h), border_radius=4)
+        fw = int(bar_w * rep / 100)
+        if fw > 0:
+            pygame.draw.rect(surface, C_GOLD if rep >= 50 else C_GREEN,
+                             pygame.Rect(bar_x, ty, fw, bar_h), border_radius=4)
+
+        # ── Achievements column (2 sub-columns) ──────────────────────────────
         pygame.draw.rect(surface, C_PANEL, ach_r, border_radius=6)
         pygame.draw.rect(surface, C_BORDER, ach_r, 1, border_radius=6)
         self._section_hdr(surface, "ACHIEVEMENTS", ach_r.x, ach_r.y, ach_r.width)
 
         earned_ids = set(p.achievements)
-        ty = ach_r.y + 46
-        ach_row_h = 44
-        for ach_id, info in ACHIEVEMENTS.items():
-            done   = ach_id in earned_ids
-            row_r  = pygame.Rect(ach_x + 8, ty, ach_w - 16, ach_row_h - 4)
-            bg     = C_ACH_DONE if done else C_ACH_LOCK
-            pygame.draw.rect(surface, bg, row_r, border_radius=4)
-            pygame.draw.rect(surface, C_BORDER if done else (45, 50, 45), row_r, 1, border_radius=4)
+        ach_list   = list(ACHIEVEMENTS.items())
+        half       = (len(ach_list) + 1) // 2
+        col_w      = (ach_r.width - 12) // 2
+        ach_row_h  = 28
+        for col_i in range(2):
+            cx_ = ach_r.x + 6 + col_i * col_w
+            ty_ = ach_r.y + 46
+            slice_ = ach_list[col_i * half: (col_i + 1) * half]
+            for ach_id, info in slice_:
+                done  = ach_id in earned_ids
+                row_r = pygame.Rect(cx_, ty_, col_w - 4, ach_row_h - 2)
+                pygame.draw.rect(surface, C_ACH_DONE if done else C_ACH_LOCK,
+                                 row_r, border_radius=3)
+                pygame.draw.rect(surface,
+                                 C_BORDER if done else (45, 50, 45),
+                                 row_r, 1, border_radius=3)
+                icon = "★" if done else "○"
+                ic   = self.font_small.render(icon, True,
+                                              C_GOLD if done else C_GRAY)
+                surface.blit(ic, (row_r.x + 4, row_r.y + 6))
+                lbl_s = self.font_small.render(info["label"], True,
+                                               C_WHITE if done else C_GRAY)
+                surface.blit(lbl_s, (row_r.x + 18, row_r.y + 6))
+                ty_ += ach_row_h
 
-            icon = "★" if done else "○"
-            ic   = self.font_hdr.render(icon, True, C_GOLD if done else C_GRAY)
-            surface.blit(ic, (row_r.x + 8, row_r.y + 6))
+        # ── Records & Milestones column ───────────────────────────────────────
+        pygame.draw.rect(surface, C_PANEL, records_r, border_radius=6)
+        pygame.draw.rect(surface, C_BORDER, records_r, 1, border_radius=6)
+        self._section_hdr(surface, "RECORDS", records_r.x, records_r.y,
+                          records_r.width)
 
-            lc = C_WHITE if done else C_GRAY
-            ls = self.font_med.render(info["label"], True, lc)
-            surface.blit(ls, (row_r.x + 30, row_r.y + 4))
-            ds = self.font_small.render(info["desc"], True,
-                                        C_GRAY if done else (60, 65, 60))
-            surface.blit(ds, (row_r.x + 30, row_r.y + 22))
-            ty += ach_row_h
+        rx  = records_r.x + 10
+        rty = records_r.y + 46
+
+        # Course records
+        course_recs = getattr(p, "course_records", {})
+        if course_recs:
+            cr_hdr = self.font_small.render("Course Records:", True, C_GOLD)
+            surface.blit(cr_hdr, (rx, rty)); rty += 18
+            for cname, best in sorted(course_recs.items()):
+                short = cname[:20]
+                s = self.font_small.render(f"  {short}: {best}", True, (200, 210, 200))
+                surface.blit(s, (rx, rty)); rty += 16
+                if rty > records_r.bottom - 80:
+                    more_s = self.font_small.render(
+                        f"  …and {len(course_recs) - list(course_recs).index(cname) - 1} more",
+                        True, C_GRAY)
+                    surface.blit(more_s, (rx, rty)); rty += 16
+                    break
+        else:
+            no_s = self.font_small.render("No course records yet", True, C_GRAY)
+            surface.blit(no_s, (rx, rty)); rty += 18
+
+        rty += 8
+
+        # Hole-in-ones log
+        hio_hdr = self.font_small.render(
+            f"Hole-in-Ones ({hio_count}):", True, C_GOLD)
+        surface.blit(hio_hdr, (rx, rty)); rty += 18
+        if hio_list:
+            for entry in hio_list[-5:]:   # show last 5
+                s = self.font_small.render(
+                    f"  Hole {entry.get('hole_number','-')}, "
+                    f"{entry.get('course_name','?')[:16]}, "
+                    f"S{entry.get('season','?')}",
+                    True, (200, 210, 200))
+                surface.blit(s, (rx, rty)); rty += 15
+        else:
+            none_s = self.font_small.render("  None yet", True, C_GRAY)
+            surface.blit(none_s, (rx, rty)); rty += 15
+
+        rty += 8
+
+        # Season arc status
+        try:
+            from src.data.narrative_events import get_arc
+            arc = get_arc(getattr(p, "current_arc_id", None))
+            if arc:
+                arc_col = C_GREEN if getattr(p, "arc_completed", False) else C_GOLD
+                a_s = self.font_small.render(
+                    f"Arc: {arc['title']}", True, arc_col)
+                surface.blit(a_s, (rx, rty)); rty += 16
+                obj_s = self.font_small.render(
+                    f"  {arc['objective']}", True, C_GRAY)
+                surface.blit(obj_s, (rx, rty)); rty += 16
+        except Exception:
+            pass
 
     # ── Helpers ───────────────────────────────────────────────────────────────
 
@@ -1205,7 +1449,7 @@ class CareerHubState:
 
         # 3. Sponsors: tour 4+ with no active sponsor and at least one offer.
         if p.tour_level >= 4 and p.active_sponsor is None:
-            if get_available_sponsors(p.tour_level):
+            if get_available_sponsors(p.tour_level, getattr(p, "reputation", 0)):
                 return 2
 
         return None

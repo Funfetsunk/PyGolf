@@ -39,9 +39,12 @@ MAX_ROWS  = 22
 class TourStandingsState:
     """Season standings screen."""
 
-    def __init__(self, game):
+    def __init__(self, game, missed_championship: bool = False,
+                 missed_pos: int | None = None):
         self.game   = game
         self.player = game.player
+        self._missed_championship = missed_championship
+        self._missed_pos          = missed_pos
 
         self.font_title  = fonts.heading(34)
         self.font_hdr    = fonts.heading(15)
@@ -318,6 +321,14 @@ class TourStandingsState:
             ban_col = C_GREEN if good else C_RED
             ban_s   = self.font_large.render(info["message"], True, ban_col)
             surface.blit(ban_s, (cx - ban_s.get_width() // 2, 110))
+
+        if self._missed_championship and self._season_over:
+            pos_txt = (f" ({self._ordinal(self._missed_pos)} in standings)"
+                       if self._missed_pos else "")
+            mc_s = self.font_medium.render(
+                f"You did not qualify for the Tour Championship{pos_txt}",
+                True, C_YELLOW)
+            surface.blit(mc_s, (cx - mc_s.get_width() // 2, 134))
 
         # ── Table ─────────────────────────────────────────────────────────────
         self._draw_table(surface, threshold)

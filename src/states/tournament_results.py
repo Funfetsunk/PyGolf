@@ -65,6 +65,7 @@ class TournamentResultsState:
         self.game       = game
         self.tournament = tournament
         self.result     = result
+        self._rival_name = getattr(game.player, "rival_name", None) if game.player else None
 
         self.font_title  = fonts.heading(36)
         self.font_hdr    = fonts.heading(15)
@@ -189,6 +190,24 @@ class TournamentResultsState:
             sb = self.font_medium.render(sb_txt, True, C_GREEN)
             surface.blit(sb, (cx - sb.get_width() // 2, 118))
 
+        # ── Tour Championship extras ──────────────────────────────────────────
+        extra_y = 140
+        if getattr(t, "is_finale", False):
+            offsets = getattr(t, "starting_score_offset", {})
+            non_zero = {name: v for name, v in offsets.items() if v != 0}
+            if non_zero:
+                parts = sorted(non_zero.items(), key=lambda x: x[1])
+                offset_str = "Starting offsets: " + ", ".join(
+                    f"{name} {v:+d}" for name, v in parts)
+                os_lbl = self.font_small.render(offset_str, True, C_YELLOW)
+                surface.blit(os_lbl, (cx - os_lbl.get_width() // 2, extra_y))
+                extra_y += 18
+            if getattr(t, "promotion_wildcard", False):
+                wc_lbl = self.font_medium.render(
+                    "Tour Championship Winner — Automatic Promotion Wildcard",
+                    True, C_GOLD)
+                surface.blit(wc_lbl, (cx - wc_lbl.get_width() // 2, extra_y))
+
         # ── Leaderboard / bracket table ───────────────────────────────────────
         if self._is_matchplay:
             self._draw_matchplay_summary(surface)
@@ -286,13 +305,14 @@ class TournamentResultsState:
                 pygame.draw.rect(surface, (16, 24, 16),
                                  pygame.Rect(tx, ry, tw, ROW_H - 1))
 
-            tc = C_WHITE if is_pl else (200, 210, 200)
+            is_rival = (not is_pl and entry.get("name") == self._rival_name)
+            tc = C_WHITE if is_pl else ((220, 140, 50) if is_rival else (200, 210, 200))
 
             # Pos
             surface.blit(self.font_small.render(str(real_pos), True, tc),
                          (col[0] + 4, ry + 3))
             # Name
-            name_str = ("★ " + entry["name"]) if is_pl else entry["name"]
+            name_str = ("★ " + entry["name"]) if is_pl else (("⚔ " + entry["name"]) if is_rival else entry["name"])
             surface.blit(self.font_small.render(name_str, True, tc),
                          (col[1] + 4, ry + 3))
             # Nationality

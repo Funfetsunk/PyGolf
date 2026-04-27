@@ -29,6 +29,16 @@ Phase 3 additions
 -----------------
 skins         : skin_value, skins_carried, skins_won, skins_prize_per_hole
 proam         : partner_scores (pre-simulated amateur best-ball per hole)
+
+Phase 4 additions
+-----------------
+event_type    : "regular" | "proam" | "stableford" | "skins" | "matchplay"
+                | "championship" | "major"
+is_opener     : True for event 1 of the season (Pro-Am)
+is_finale     : True for the season-closing Tour Championship
+starting_score_offset : dict mapping names to stroke adjustments for the
+                Tour Championship (top 3 in standings get -3/-2/-1)
+promotion_wildcard : True when the player wins the Tour Championship
 """
 
 # ── Scoring format constants ──────────────────────────────────────────────────
@@ -70,6 +80,9 @@ MAJOR_PRIZE_FUND = 4_500_000
 # Events per season per tour level
 EVENTS_PER_SEASON = {1: 8, 2: 10, 3: 12, 4: 14, 5: 16, 6: 18}
 
+# Top-N season-points finishes required to qualify for the Tour Championship
+TOUR_CHAMPIONSHIP_QUALIFIERS = {1: 15, 2: 15, 3: 12, 4: 12, 5: 10, 6: 10}
+
 # Top-N finish required for promotion at end of season
 PROMOTION_THRESHOLD = {1: 3, 2: 5, 3: 3, 4: 5, 5: 10, 6: None}
 
@@ -110,7 +123,11 @@ class Tournament:
                  is_qschool: bool = False,
                  rng_seed: int | None = None,
                  course_name: str | None = None,
-                 format: str = FORMAT_STROKE_PLAY):
+                 format: str = FORMAT_STROKE_PLAY,
+                 event_type: str = "regular",
+                 is_opener: bool = False,
+                 is_finale: bool = False,
+                 starting_score_offset: dict | None = None):
         import random as _random
         self.name         = name
         self.tour_level   = tour_level
@@ -147,7 +164,13 @@ class Tournament:
         rng = _random.Random(self.rng_seed)
 
         # ── Scoring format ────────────────────────────────────────────────────
-        self.format = format
+        self.format    = format
+        # ── Phase 4 — schedule metadata ──────────────────────────────────────
+        self.event_type            = event_type
+        self.is_opener             = is_opener
+        self.is_finale             = is_finale
+        self.starting_score_offset: dict[str, int] = starting_score_offset or {}
+        self.promotion_wildcard:    bool            = False
 
         # ── Match play bracket (Phase 2) ──────────────────────────────────────
         if self.format == FORMAT_MATCH_PLAY and self.opponents:
@@ -484,6 +507,11 @@ class Tournament:
                 "nationality": opp.nationality,
             })
 
+        # Apply championship starting offsets (Phase 4)
+        if self.starting_score_offset:
+            for e in entries:
+                e["vs_par"] += self.starting_score_offset.get(e["name"], 0)
+
         return sorted(entries, key=lambda e: (e["vs_par"], e["name"]))
 
     # ── Final leaderboard (after all rounds) ─────────────────────────────────
@@ -517,6 +545,13 @@ class Tournament:
                 "vs_par":      total - rnd_count * self.course_par,
                 "nationality": opp.nationality,
             })
+
+        # Apply championship starting offsets (Phase 4)
+        if self.starting_score_offset:
+            for e in entries:
+                offset = self.starting_score_offset.get(e["name"], 0)
+                e["vs_par"] += offset
+                e["total"]  += offset
 
         return sorted(entries, key=lambda e: (e["total"], e["name"]))
 
@@ -625,6 +660,12 @@ class Tournament:
             "skins_won":            list(self.skins_won),
             "skins_prize_per_hole": list(self.skins_prize_per_hole),
             "partner_scores":       list(self.partner_scores),
+            # Phase 4 — schedule metadata
+            "event_type":             self.event_type,
+            "is_opener":              self.is_opener,
+            "is_finale":              self.is_finale,
+            "starting_score_offset":  dict(self.starting_score_offset),
+            "promotion_wildcard":     self.promotion_wildcard,
         }
 
     @classmethod
@@ -669,4 +710,10 @@ class Tournament:
         t.skins_won            = list(data.get("skins_won",            []))
         t.skins_prize_per_hole = list(data.get("skins_prize_per_hole", []))
         t.partner_scores       = list(data.get("partner_scores",       []))
+        # Phase 4 — schedule metadata
+        t.event_type             = data.get("event_type",             "regular")
+        t.is_opener              = data.get("is_opener",              False)
+        t.is_finale              = data.get("is_finale",              False)
+        t.starting_score_offset  = dict(data.get("starting_score_offset", {}))
+        t.promotion_wildcard     = data.get("promotion_wildcard",     False)
         return t
