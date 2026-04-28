@@ -12,7 +12,7 @@ All notable changes to Let's Golf! are documented here.
 
 ---
 
-## Planned — Phases 7–11: Practice, Awards, Equipment & Career Depth
+## 2026-04-28 — Phases 7–11: Practice, Awards, Equipment & Career Depth
 
 ### Added
 
