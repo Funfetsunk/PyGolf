@@ -78,7 +78,7 @@ PRIZE_FUNDS = {
 MAJOR_PRIZE_FUND = 4_500_000
 
 # Events per season per tour level
-EVENTS_PER_SEASON = {1: 8, 2: 10, 3: 12, 4: 14, 5: 16, 6: 18}
+EVENTS_PER_SEASON = {1: 8, 2: 10, 3: 13, 4: 15, 5: 17, 6: 22}
 
 # Top-N season-points finishes required to qualify for the Tour Championship
 TOUR_CHAMPIONSHIP_QUALIFIERS = {1: 15, 2: 15, 3: 12, 4: 12, 5: 10, 6: 10}
@@ -109,6 +109,19 @@ TOUR_DISPLAY_NAMES = {
     4: "Continental Tour",
     5: "World Tour",
     6: "The Grand Tour",
+}
+
+# Season-points multiplier per event type (Phase 9)
+RANKING_MULTIPLIERS: dict[str, float] = {
+    "regular":      1.0,
+    "stableford":   1.0,
+    "matchplay":    1.5,
+    "skins":        0.75,
+    "proam":        0.5,
+    "championship": 3.0,
+    "skills":       0.5,
+    "major":        5.0,
+    "qschool":      0.0,
 }
 
 
@@ -618,8 +631,10 @@ class Tournament:
         return int(self.prize_fund * _PRIZE_PCTS[idx] / 100)
 
     def get_season_points(self, position: int) -> int:
-        idx = min(position - 1, len(_SEASON_PTS) - 1)
-        return _SEASON_PTS[idx]
+        idx  = min(position - 1, len(_SEASON_PTS) - 1)
+        base = _SEASON_PTS[idx]
+        mult = RANKING_MULTIPLIERS.get(self.event_type, 1.0)
+        return int(base * mult)
 
     # ── Serialisation ─────────────────────────────────────────────────────────
 

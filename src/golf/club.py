@@ -6,11 +6,14 @@ Each set improves distance and accuracy.  Players buy sets via the Career Hub.
 
 
 class Club:
-    def __init__(self, name, max_distance_yards, accuracy, can_shape=True):
+    def __init__(self, name, max_distance_yards, accuracy, can_shape=True,
+                 is_prototype=False, prototype_uses=0):
         self.name = name
         self.max_distance_yards = max_distance_yards
         self.accuracy = accuracy
         self.can_shape = can_shape
+        self.is_prototype = is_prototype
+        self.prototype_uses = prototype_uses
 
     def __repr__(self):
         return f"Club({self.name}, {self.max_distance_yards}yds, acc={self.accuracy:.2f})"

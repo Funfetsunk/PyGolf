@@ -2,6 +2,107 @@
 
 All notable changes to Let's Golf! are documented here.
 
+## [Unreleased] — Bug Fixes (review follow-up)
+
+### Fixed
+- **`temp_stat_modifiers` bleed** — narrative event effects (e.g. "Fitness -5 this event") are now cleared immediately after being read at the start of each `GolfRoundState`, preventing them from persisting into future events across the entire career.
+- **Silent achievement failures** — all bare `except: pass` blocks in `service.py` (rival tracker, comeback win, beat-rival-major) replaced with named `except Exception as e` + `print()` logging; broken attribute access or missing fields will now surface in the console instead of silently killing achievements.
+- **Sponsor reputation gate bypass** — `narrative_handler._accept_best_available_sponsor` now passes `player.reputation` to `get_available_sponsors`, so reputation-gated sponsors can no longer be obtained via the narrative event path.
+- **Match play head-to-head wrong result** — rival H2H updates for match play events now use the bracket result (win/loss by `position`) rather than the stroke-play leaderboard. The final bracket opponent is correctly recovered from `tournament.bracket[match_round]` in both the win and loss paths. `check_rival` is skipped for match play because vs-par comparison is meaningless in that format.
+
+---
+
+## [Unreleased] — Phases 7–11: Practice, Awards, Equipment & Career Depth
+
+### Added
+
+#### Practice Minigames (Phase 7)
+- Four practice activities are now accessible from the **Training** panel in the Career Hub between events: **Driving Range**, **Putting Green**, **Bunker Escape**, and **Closest to Pin**
+- Each minigame has a one-event cooldown — once played it is greyed out until the next event
+- Cooldowns are saved and migrated cleanly on load
+
+#### Skills Competitions (Phases 7 / Schedule)
+- A **Skills Competition** event type appears in tour schedules (Tours 3–6), preceding each major on Tour 6
+- Skills competitions launch a `LongDriveState` session tracked by `SkillsSession`
+- The Career Hub event panel labels these correctly and routes to the right state
+
+#### Expanded Tour Schedules (Phase 7 / Schedule)
+- Tours 3–6 now have fully defined deterministic season schedules replacing the old hand-rolled event index checks
+- Tour 3 (Development): 13 events including skills, skins, stableford, and a season championship finale
+- Tour 4 (Continental): 15 events with skills, match play, skins, stableford, and finale
+- Tour 5 (World): 17 events with skills, match play, skins, stableford, and finale
+- Tour 6 (Grand Tour): 22-event season with 4 majors at fixed positions (events 4, 10, 16, 22), preceded by skills competitions at events 3, 9, 15, 21
+
+#### Year-End Awards (Phase 9)
+- The game now tracks `year_end_awards` across a player's career
+- `previous_season_position` is recorded each season to power award logic
+- New `YearEndAwardsState` screen presented at season end
+
+#### Hall of Fame — Expanded Layout (Phase 9)
+- The Hall of Fame screen is redesigned into a **four-box layout**:
+  - **Top-left** — Major Championships (each major shown with ★ won / ○ not yet)
+  - **Top-right** — Career Statistics (seasons, events, wins, top-5/top-10, best round, earnings, peak world rank)
+  - **Bottom-left** — Rival & Year-End Awards (rival name, head-to-head record W/L/H, awards list)
+  - **Bottom-right** — Achievements
+- A **Grand Slam Champion · World No. 1** banner appears when both conditions are met simultaneously
+
+#### Multi-Year Career Fitness Degradation (Phase 10)
+- `career_season` is now tracked independently of `season` (which resets on promotion)
+- From career season 5 onward, Fitness degrades by 1 point per season (floor: 40), modelling the physical toll of a long career
+
+#### Equipment Extras (Phase 11)
+- **Club Fitting** — before a major, players can spend $500 to fit their Driver for +5% accuracy for that event only; button appears in the event panel when a major is upcoming
+- **Club Wear** — clubs accumulate accuracy loss over repeated use (`club_wear` dict, 0–0.10 per club)
+- **Re-groove** — players can spend $150 in the Equipment panel's new Maintenance section to reset wear on any degraded club
+- **Prototype Driver** — obtainable via narrative event; use it 5× and finish top 10 to permanently unlock Accuracy +1; converted via a career log entry that surfaces on the results screen
+- `Club` dataclass gains `is_prototype` and `prototype_uses` fields
+
+### Changed
+- `save_format` bumped from **5 → 8** (v5→v6 Phase 7 fields, v6→v7 Phase 10 `career_season`, v7→v8 Phase 11 equipment fields); all versions default cleanly in `Player.from_dict` — no data loss on old saves
+
+---
+
+## [Unreleased] — Phases 4–6: Season Structure, Rivals & Narrative
+
+### Added
+
+#### Season Schedule (Phase 4)
+- Season schedules are now generated deterministically via `schedule_data.generate_season_schedule` and stored on the player, replacing hard-coded `event_n % N` chains
+- Event metadata includes `event_type`, `format`, `is_opener`, `is_finale`, and `major_id`
+- A **Tour Championship** finale event ends each season; the winner receives a `promotion_wildcard` bypassing the normal points threshold
+- `TOUR_CHAMPIONSHIP_QUALIFIERS` defines how many players qualify per tour level
+
+#### Rival Tracker (Phase 5)
+- After each stroke-play event, opponents within 3 strokes of the player accumulate `close_finishes`; once any opponent reaches 5 close finishes the player's rival is set (one rival per career)
+- **Head-to-head record** (W / L / Halved) is tracked against the rival each event
+- Rival name and H2H record appear on the Hall of Fame screen
+
+#### Reputation System (Phase 5)
+- Players earn reputation points for wins: +5 for a regular win, +8 for a match play win, +15 for a major win
+- Reputation gates sponsor availability
+
+#### Career Narrative Events (Phase 5/6)
+- Between events the game can trigger a **Narrative Event** screen with a choice of two options, each applying an effect to the player
+- Effects include: signing a sponsor, temporary stat buffs/debuffs, skipping an event, equipping a prototype club, or setting a slump objective
+- Events are gated by tour level, season, and career state; defined in `src/data/narrative_events.py`
+
+#### Season Arcs (Phase 6)
+- Each tour/season combination maps to a named **Season Arc** with a specific objective and money reward (e.g. "The Rookie Year — finish top 3 in standings")
+- Arcs without a specific definition fall back to the generic "Make Your Mark — win 2 events" arc
+- Arc completion is checked in `tour_standings.py` at season end
+
+#### Achievements — 20 New (Phase 6)
+- Four new achievement categories: **Scoring** (albatross, hole-in-one, best round), **Format** (win match play, skins, stableford), **Adversity** (rain win, comeback win), **Rival** (beat rival in a major)
+- Course records and hole-in-ones are logged to the career log and surface on results screens
+
+#### Career Stats Tab — Expanded (Phase 6)
+- The Career Hub stats tab is redesigned into a 3-column layout covering season stats, career totals, and format/achievement progress
+
+### Changed
+- `save_format` bumped from **2 → 5** across three phases; all bumps default cleanly on load
+
+---
+
 ## [Unreleased] — Phase 2: Match Play Format
 
 ### Added

@@ -145,65 +145,136 @@ class HallOfFameState:
                          border_radius=12)
 
         # ── Header ────────────────────────────────────────────────────────────
-        ty = 24
+        ty = 20
         cong = self.font_huge.render("CONGRATULATIONS!", True, C_GOLD)
-        surface.blit(cong, (cx - cong.get_width() // 2, ty)); ty += 62
+        surface.blit(cong, (cx - cong.get_width() // 2, ty)); ty += 56
 
         name_s = self.font_title.render(p.name, True, C_WHITE)
-        surface.blit(name_s, (cx - name_s.get_width() // 2, ty)); ty += 44
+        surface.blit(name_s, (cx - name_s.get_width() // 2, ty)); ty += 40
 
-        title_s = self.font_hdr.render(
-            "World No. 1  •  All 4 Majors Champion", True, C_GOLD2)
-        surface.blit(title_s, (cx - title_s.get_width() // 2, ty)); ty += 32
+        # Grand Slam Champion banner
+        all_majors = all(m in p.majors_won for m in MAJOR_ORDER)
+        if all_majors and p.world_rank == 1:
+            gs = self.font_hdr.render(
+                "★  GRAND SLAM CHAMPION  •  WORLD NO. 1  ★", True, C_GOLD)
+            surface.blit(gs, (cx - gs.get_width() // 2, ty)); ty += 28
+        else:
+            ts2 = self.font_hdr.render(
+                "World No. 1  •  All 4 Majors Champion", True, C_GOLD2)
+            surface.blit(ts2, (cx - ts2.get_width() // 2, ty)); ty += 28
 
         # Stars
-        stars = "★ ★ ★ ★ ★"
-        ss = self.font_hdr.render(stars, True, C_STAR)
-        surface.blit(ss, (cx - ss.get_width() // 2, ty)); ty += 36
+        ss = self.font_hdr.render("★ ★ ★ ★ ★", True, C_STAR)
+        surface.blit(ss, (cx - ss.get_width() // 2, ty)); ty += 30
 
-        # ── Two-column body ───────────────────────────────────────────────────
-        col_w = 440
-        lx    = cx - col_w - 20
-        rx    = cx + 20
-        by2   = ty
+        # ── Four-box body layout ──────────────────────────────────────────────
+        box_w = 580
+        box_h = 155
+        lx    = cx - box_w - 10
+        rx    = cx + 10
+        row1_y = ty
+        row2_y = ty + box_h + 10
 
-        # ── Left: Majors won ──────────────────────────────────────────────────
-        self._box(surface, pygame.Rect(lx, by2, col_w, 180))
-        mh = self.font_hdr.render("MAJOR CHAMPIONSHIPS WON", True, C_GOLD)
-        surface.blit(mh, (lx + 12, by2 + 8))
-        my = by2 + 34
+        # ── Top-left: Majors won ──────────────────────────────────────────────
+        self._box(surface, pygame.Rect(lx, row1_y, box_w, box_h))
+        mh = self.font_hdr.render("MAJOR CHAMPIONSHIPS", True, C_GOLD)
+        surface.blit(mh, (lx + 12, row1_y + 7))
+        my = row1_y + 30
         for mid in MAJOR_ORDER:
             info = MAJORS[mid]
-            won  = mid in p.majors_won
-            icon = "★" if won else "○"
-            col  = C_GOLD if won else C_GRAY
-            ms   = self.font_med.render(
-                f"  {icon}  {info['name']}", True, col)
-            surface.blit(ms, (lx + 12, my)); my += 30
+            won_m = mid in p.majors_won
+            icon  = "★" if won_m else "○"
+            col   = C_GOLD if won_m else C_GRAY
+            ms    = self.font_med.render(f"  {icon}  {info['name']}", True, col)
+            surface.blit(ms, (lx + 12, my)); my += 28
 
-        # ── Right: Career stats ───────────────────────────────────────────────
-        self._box(surface, pygame.Rect(rx, by2, col_w, 180))
+        # ── Top-right: Career statistics ──────────────────────────────────────
+        self._box(surface, pygame.Rect(rx, row1_y, box_w, box_h))
         sh = self.font_hdr.render("CAREER STATISTICS", True, C_GOLD)
-        surface.blit(sh, (rx + 12, by2 + 8))
+        surface.blit(sh, (rx + 12, row1_y + 7))
+        best_r = p.best_round
+        best_str = (f"{best_r:+d}" if best_r is not None else "—")
+        peak_rank = getattr(p, "world_rank_peak", p.world_rank)
         stat_rows = [
-            ("Seasons Played",  str(p.season - 1)),
-            ("Events Played",   str(p.events_played)),
-            ("Career Wins",     str(p.career_wins)),
-            ("Top-5 Finishes",  str(p.career_top5)),
-            ("Career Earnings", f"${p.total_earnings:,}"),
+            ("Seasons",          str(p.season - 1)),
+            ("Events / Wins",    f"{p.events_played} / {p.career_wins}"),
+            ("Top-5 / Top-10",   f"{p.career_top5} / {p.career_top10}"),
+            ("Best Round",       best_str),
+            ("Career Earnings",  f"${p.total_earnings:,}"),
+            ("Peak World Rank",  f"#{peak_rank}"),
         ]
-        sy = by2 + 34
+        sy = row1_y + 30
+        mid_x = rx + 220
         for label, val in stat_rows:
-            ls = self.font_med.render(label + ":", True, C_GRAY)
-            vs = self.font_med.render(val,         True, C_WHITE)
-            surface.blit(ls, (rx + 12,  sy))
-            surface.blit(vs, (rx + 230, sy))
-            sy += 27
+            ls = self.font_small.render(label + ":", True, C_GRAY)
+            vs = self.font_small.render(val,          True, C_WHITE)
+            surface.blit(ls, (rx + 12, sy))
+            surface.blit(vs, (mid_x,    sy))
+            sy += 20
+
+        # ── Bottom-left: Rival & year-end awards ──────────────────────────────
+        self._box(surface, pygame.Rect(lx, row2_y, box_w, box_h))
+        rh = self.font_hdr.render("RIVAL & YEAR-END AWARDS", True, C_GOLD)
+        surface.blit(rh, (lx + 12, row2_y + 7))
+        ry = row2_y + 30
+
+        rival = getattr(p, "rival_name", None)
+        h2h   = getattr(p, "rival_head_to_head",
+                        {"wins": 0, "losses": 0, "halved": 0})
+        if rival:
+            rv_s = self.font_small.render(
+                f"Rival: {rival}   "
+                f"W{h2h.get('wins',0)} / L{h2h.get('losses',0)} / H{h2h.get('halved',0)}",
+                True, C_WHITE)
+            surface.blit(rv_s, (lx + 12, ry)); ry += 20
+        else:
+            rv_s = self.font_small.render("No rival set.", True, C_GRAY)
+            surface.blit(rv_s, (lx + 12, ry)); ry += 20
+
+        ry += 4
+        awards = getattr(p, "year_end_awards", [])
+        if awards:
+            aw_h = self.font_small.render(f"Awards won ({len(awards)}):", True, C_GOLD2)
+            surface.blit(aw_h, (lx + 12, ry)); ry += 18
+            # Show up to 4 most recent
+            for aw in awards[-4:]:
+                aw_s = self.font_small.render(f"  • {aw.replace('_', ' ').title()}", True, C_WHITE)
+                surface.blit(aw_s, (lx + 12, ry)); ry += 16
+        else:
+            aw_s = self.font_small.render("No year-end awards.", True, C_GRAY)
+            surface.blit(aw_s, (lx + 12, ry))
+
+        # ── Bottom-right: Achievements ────────────────────────────────────────
+        from src.career.player import ACHIEVEMENTS
+        self._box(surface, pygame.Rect(rx, row2_y, box_w, box_h))
+        ah = self.font_hdr.render("ACHIEVEMENTS", True, C_GOLD)
+        surface.blit(ah, (rx + 12, row2_y + 7))
+        earned = [k for k in p.achievements if k in ACHIEVEMENTS]
+        total_ach = len(ACHIEVEMENTS)
+        cnt_s = self.font_small.render(
+            f"{len(earned)} / {total_ach} unlocked", True, C_WHITE)
+        surface.blit(cnt_s, (rx + 12, row2_y + 30))
+        # Two columns of achievement names
+        half   = (len(earned) + 1) // 2
+        col1   = earned[:half]
+        col2   = earned[half:half * 2]
+        ay     = row2_y + 50
+        acol1x = rx + 12
+        acol2x = rx + box_w // 2 + 10
+        max_rows = (box_h - 55) // 16
+        for i in range(min(max_rows, len(col1))):
+            lbl = ACHIEVEMENTS[col1[i]]["label"]
+            s   = self.font_small.render(f"★ {lbl}", True, C_GOLD2)
+            surface.blit(s, (acol1x, ay + i * 16))
+        for i in range(min(max_rows, len(col2))):
+            lbl = ACHIEVEMENTS[col2[i]]["label"]
+            s   = self.font_small.render(f"★ {lbl}", True, C_GOLD2)
+            surface.blit(s, (acol2x, ay + i * 16))
 
         # ── Quote ─────────────────────────────────────────────────────────────
-        q_y = by2 + 198
-        quote = (f'"{p.name} — the greatest golfer of a generation."')
-        qs = self.font_med.render(quote, True, (180, 180, 140))
+        q_y = row2_y + box_h + 14
+        quote = f'"{p.name} — the greatest golfer of a generation."'
+        qs = self.font_small.render(quote, True, (160, 160, 120))
         surface.blit(qs, (cx - qs.get_width() // 2, q_y))
 
         # ── Buttons ───────────────────────────────────────────────────────────

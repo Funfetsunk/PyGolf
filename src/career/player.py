@@ -152,6 +152,27 @@ class Player:
         self.current_arc_id: str | None = None
         self.arc_completed: bool = False
 
+        # Phase 7 — practice minigames
+        self.practice_cooldowns: dict[str, int] = {}
+        self.cttp_best_yards: float | None = None
+        self.practice_stat_seasons: dict[str, int] = {}
+        self.temp_event_buffs: dict[str, int] = {}
+
+        # Phase 9 — year-end awards & career tracking
+        self.previous_season_position: int | None = None
+        self.year_end_awards: list[str] = []
+        self.seasons_on_current_tour: int = 1
+        self.world_rank_peak: int = 201
+
+        # Phase 10 — multi-year career
+        self.career_season: int = 1
+
+        # Phase 11 — equipment extras
+        self.club_fitting_active: dict | None = None   # {club, bonus} clears after round
+        self.prototype_club: dict | None = None        # serialised as dict
+        self.prototype_uses_goal: int = 5
+        self.club_wear: dict[str, float] = {}          # club name → accuracy loss (0–0.10)
+
     @property
     def clubs(self):
         return get_club_bag(self.club_set_name)
@@ -185,6 +206,13 @@ class Player:
         return False
 
     # ── Equipment ─────────────────────────────────────────────────────────────
+
+    def regrove_club(self, club_name: str) -> bool:
+        """Pay $150 to reset wear on one club. Returns True on success."""
+        if not self.spend_money(150):
+            return False
+        self.club_wear.pop(club_name, None)
+        return True
 
     def upgrade_club_set(self, set_name: str) -> bool:
         """
@@ -355,7 +383,7 @@ class Player:
             if diff <= 3:
                 self.close_finishes[name] = self.close_finishes.get(name, 0) + 1
                 if self.rival_name is None and self.close_finishes[name] >= 5:
-                    self.rival_name = name
+                    self.rival_name = name  # set once per career; never reassigned
 
     def update_head_to_head(self, leaderboard: list[dict]) -> None:
         """Update head-to-head record against the current rival."""
@@ -386,14 +414,19 @@ class Player:
 
     def reset_season(self) -> None:
         self._pay_out_sponsor()
-        self.season            += 1
-        self.season_points      = 0
-        self.events_this_season = 0
-        self.opp_season_points  = {}
-        self.season_schedule    = generate_season_schedule(self.tour_level, self.season)
-        self.arc_completed      = False
+        self.season                  += 1
+        self.season_points            = 0
+        self.events_this_season       = 0
+        self.opp_season_points        = {}
+        self.seasons_on_current_tour += 1
+        self.season_schedule          = generate_season_schedule(self.tour_level, self.season)
+        self.arc_completed            = False
         from src.data.narrative_events import get_arc_id
         self.current_arc_id = get_arc_id(self.tour_level, self.season)
+        # Phase 10 — fitness degrades by 1 from career season 5 onward
+        if self.career_season >= 5:
+            self.stats["fitness"] = max(40, self.stats["fitness"] - 1)
+        self.career_season += 1
 
     def earn_money(self, amount: int) -> None:
         self.money += amount
@@ -532,6 +565,23 @@ class Player:
             "slump_objective":         self.slump_objective,
             "current_arc_id":          self.current_arc_id,
             "arc_completed":           self.arc_completed,
+            # Phase 7
+            "practice_cooldowns":      dict(self.practice_cooldowns),
+            "cttp_best_yards":         self.cttp_best_yards,
+            "practice_stat_seasons":   dict(self.practice_stat_seasons),
+            "temp_event_buffs":        dict(self.temp_event_buffs),
+            # Phase 9
+            "previous_season_position": self.previous_season_position,
+            "year_end_awards":          list(self.year_end_awards),
+            "seasons_on_current_tour":  self.seasons_on_current_tour,
+            "world_rank_peak":          self.world_rank_peak,
+            # Phase 10
+            "career_season":            self.career_season,
+            # Phase 11
+            "club_fitting_active":      self.club_fitting_active,
+            "prototype_club":           self.prototype_club,
+            "prototype_uses_goal":      self.prototype_uses_goal,
+            "club_wear":                dict(self.club_wear),
         }
 
     @classmethod
@@ -590,4 +640,21 @@ class Player:
         if p.current_arc_id is None:
             from src.data.narrative_events import get_arc_id
             p.current_arc_id = get_arc_id(p.tour_level, p.season)
+        # Phase 7
+        p.practice_cooldowns    = data.get("practice_cooldowns", {})
+        p.cttp_best_yards       = data.get("cttp_best_yards", None)
+        p.practice_stat_seasons = data.get("practice_stat_seasons", {})
+        p.temp_event_buffs      = data.get("temp_event_buffs", {})
+        # Phase 9
+        p.previous_season_position = data.get("previous_season_position", None)
+        p.year_end_awards          = data.get("year_end_awards", [])
+        p.seasons_on_current_tour  = data.get("seasons_on_current_tour", 1)
+        p.world_rank_peak          = data.get("world_rank_peak", 201)
+        # Phase 10 — default to p.season for old saves (equivalent tracking)
+        p.career_season            = data.get("career_season", p.season)
+        # Phase 11
+        p.club_fitting_active = data.get("club_fitting_active", None)
+        p.prototype_club      = data.get("prototype_club", None)
+        p.prototype_uses_goal = data.get("prototype_uses_goal", 5)
+        p.club_wear           = data.get("club_wear", {})
         return p

@@ -88,6 +88,21 @@ class GolfRoundState:
         self.cam_y = tee_wy - VIEWPORT_H / 2
         self._clamp_camera()
         self.clubs    = list(game.player.clubs) if game.player else list(STARTER_BAG)
+        # Phase 11 — inject prototype driver if equipped
+        if game.player is not None:
+            proto = getattr(game.player, "prototype_club", None)
+            if proto:
+                from src.golf.club import Club
+                proto_club = Club(
+                    proto["name"], proto["max_distance_yards"],
+                    proto["accuracy"], proto.get("can_shape", True),
+                    is_prototype=True,
+                    prototype_uses=proto.get("prototype_uses", 0),
+                )
+                for i, c in enumerate(self.clubs):
+                    if c.name == "Driver":
+                        self.clubs[i] = proto_club
+                        break
         self.club_idx = 0
         self.strokes  = 0
 
@@ -216,7 +231,10 @@ class GolfRoundState:
             return club
         ball = get_ball(getattr(player, "ball_type", "range"))
 
-        tmp = getattr(player, "temp_stat_modifiers", {})
+        tmp = dict(getattr(player, "temp_stat_modifiers", {}))
+        player.temp_stat_modifiers = {}   # consumed for this hole; prevents bleed into future events
+        for k, v in getattr(player, "temp_event_buffs", {}).items():
+            tmp[k] = tmp.get(k, 0) + v
 
         def eff(key):
             return (player.stats.get(key, 50)
@@ -271,6 +289,15 @@ class GolfRoundState:
                     new_acc *= (1.0 - pressure * 0.25)
             except Exception:
                 pass
+
+        # Phase 11 — club wear reduces accuracy
+        wear = getattr(player, "club_wear", {}).get(club.name, 0.0)
+        new_acc -= wear
+
+        # Phase 11 — club fitting gives a temporary accuracy bonus for one event
+        fitting = getattr(player, "club_fitting_active", None)
+        if fitting and fitting.get("club") == club.name:
+            new_acc += fitting.get("bonus", 0.0)
 
         effective = Club(club.name, new_dist, min(0.99, new_acc), club.can_shape)
         effective.shape_mult = ball["shape_mult"]
@@ -646,6 +673,14 @@ class GolfRoundState:
         elif terrain == Terrain.BUNKER:
             self._show_message("In the bunker", 1.6)
 
+        # Phase 11 — accumulate wear when landing in bunker or trees
+        _player = self.game.player
+        if _player is not None and terrain in (Terrain.BUNKER, Terrain.TREES):
+            _cn = self.current_club.name
+            _cw = getattr(_player, "club_wear", {})
+            _cw[_cn] = min(0.10, _cw.get(_cn, 0.0) + 0.005)
+            _player.club_wear = _cw
+
         self._auto_select_club()
 
     def _play_score_sound(self):
@@ -797,6 +832,10 @@ class GolfRoundState:
                 return
 
         if self.hole_index >= 17:
+            # Clear practice hot-putter buff and club fitting at end of round
+            if self.game.player is not None:
+                self.game.player.temp_event_buffs.clear()
+                self.game.player.club_fitting_active = None  # Phase 11: fitting is per-round
             # All 18 holes done — show final scorecard
             self.game.change_state(RoundSummaryState(self.game, self.course, updated_scores))
         else:

@@ -231,27 +231,28 @@ class TourStandingsState:
             self._play_next_event()
 
     def _handle_season_end(self):
-        p    = self.player
-        info = self._promotion_info or {}
-
-        if info.get("promoted"):
-            p.tour_level                   = info["new_level"]
-            p.qschool_pending              = False
-            p.qschool_attempts_remaining   = 0
-        elif info.get("qschool_qualified"):
-            # First-time qualification from a Tour 4 season finish.
-            p.qschool_pending              = True
-            p.qschool_attempts_remaining   = 2
-        elif self._is_qschool and not info.get("promoted"):
-            # Failed Q-School. If an attempt remains, let the player try again
-            # without replaying the whole season; otherwise they must re-earn
-            # qualification via another top-5 Tour 4 season.
-            if p.qschool_attempts_remaining > 0:
+        # Q-School results skip the awards ceremony — go straight to new season.
+        if self._is_qschool:
+            p    = self.player
+            info = self._promotion_info or {}
+            if info.get("promoted"):
+                p.tour_level                 = info["new_level"]
+                p.qschool_pending            = False
+                p.qschool_attempts_remaining = 0
+            elif not info.get("promoted") and p.qschool_attempts_remaining > 0:
                 p.qschool_pending = True
+            p.reset_season()
+            self.game.current_tournament = None
+            self._play_next_event()
+            return
 
-        p.reset_season()
-        self.game.current_tournament = None
-        self._play_next_event()
+        # Normal season end — route through the year-end awards screen.
+        # YearEndAwardsState will apply promotion, call reset_season, and
+        # navigate to CareerHubState once the player clicks Continue.
+        from src.states.year_end_awards import YearEndAwardsState
+        self.game.change_state(
+            YearEndAwardsState(self.game, self._promotion_info or {},
+                               is_qschool=False))
 
     def _play_next_event(self):
         from src.states.career_hub import CareerHubState

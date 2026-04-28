@@ -155,6 +155,11 @@ SEASON_ARCS: dict[tuple, dict] = {
         "target":       1,
         "reward_money": 25_000,
     },
+    # TODO: arcs are only defined for season 1 of tours 3-6 and seasons 1-2 of
+    # tours 1-2. Every other combination falls to _GENERIC_ARC ("Make Your Mark
+    # — win 2 events"), which means long-stay players on tours 3-6 see the same
+    # arc for years. Add per-tour season-2+ arcs when tour progression content
+    # is fleshed out.
 }
 
 _GENERIC_ARC = {

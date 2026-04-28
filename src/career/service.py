@@ -73,6 +73,9 @@ def process_tournament_result(player, tournament) -> dict:
     rp = get_ranking_points(player.tour_level, position, tournament.is_major)
     player.world_ranking_points += rp
     player.world_rank = compute_world_rank(player.world_ranking_points)
+    peak = getattr(player, "world_rank_peak", 201)
+    if player.world_rank < peak:
+        player.world_rank_peak = player.world_rank
 
     # Sponsor target progress. If the target is met, pay the season bonus
     # immediately and clear the contract — waiting for season end left players
@@ -107,16 +110,38 @@ def process_tournament_result(player, tournament) -> dict:
 
     # Phase 5 — rival tracker
     if not is_qschool:
-        if lb is None:
+        if fmt == "match":
+            # check_rival uses vs_par from a stroke leaderboard, which is
+            # meaningless in match play — skip it.
+            # update_head_to_head: use the bracket result instead of stroke
+            # positions. When the player won, advance_bracket() already ran so
+            # match_opponent is None; recover the final opponent via match_round.
+            if player.rival_name:
+                try:
+                    bracket = getattr(tournament, "bracket", [])
+                    idx = (tournament.match_round - 1 if position == 1
+                           else tournament.match_round)
+                    match_opp = bracket[idx] if 0 <= idx < len(bracket) else None
+                    if match_opp == player.rival_name:
+                        h2h = player.rival_head_to_head
+                        if position == 1:
+                            h2h["wins"]   = h2h.get("wins",   0) + 1
+                        else:
+                            h2h["losses"] = h2h.get("losses", 0) + 1
+                except Exception as e:
+                    print(f"[career] match play H2H update error: {e}")
+        else:
+            if lb is None:
+                try:
+                    lb = tournament.get_leaderboard()
+                except Exception as e:
+                    print(f"[career] leaderboard unavailable for rival check: {e}")
+                    lb = []
             try:
-                lb = tournament.get_leaderboard()
-            except Exception:
-                lb = []
-        try:
-            player.check_rival(lb)
-            player.update_head_to_head(lb)
-        except Exception:
-            pass
+                player.check_rival(lb)
+                player.update_head_to_head(lb)
+            except Exception as e:
+                print(f"[career] rival tracker error: {e}")
 
     # Phase 5 — reputation gains
     if not is_qschool and position == 1:
@@ -141,6 +166,7 @@ def process_tournament_result(player, tournament) -> dict:
             player.unlock_achievement("rain_win")
 
         # comeback_win — player was 5+ strokes behind leader after round 1
+        # Only reachable in multi-round events (majors); single-round events have len(p_rounds) < 2.
         try:
             p_rounds = getattr(tournament, "player_rounds", [])
             opp_holes = getattr(tournament, "_opp_holes", {})
@@ -149,8 +175,8 @@ def process_tournament_result(player, tournament) -> dict:
                 best_opp_r1 = min(sum(v[0]) for v in opp_holes.values() if v)
                 if p_r1 - best_opp_r1 >= 5:
                     player.unlock_achievement("comeback_win")
-        except Exception:
-            pass
+        except Exception as e:
+            print(f"[career] comeback_win check error: {e}")
 
         # beat_rival_major
         if getattr(tournament, "is_major", False) and player.rival_name:
@@ -163,8 +189,24 @@ def process_tournament_result(player, tournament) -> dict:
                     rival_pos = lb.index(rival_entry) + 1
                     if position < rival_pos:
                         player.unlock_achievement("beat_rival_major")
-            except Exception:
-                pass
+            except Exception as e:
+                print(f"[career] beat_rival_major check error: {e}")
+
+    # Phase 11 — prototype club progression
+    proto = getattr(player, "prototype_club", None)
+    if proto is not None and not is_qschool:
+        proto["prototype_uses"] = proto.get("prototype_uses", 0) + 1
+        goal = getattr(player, "prototype_uses_goal", 5)
+        if proto["prototype_uses"] >= goal and position <= 10:
+            # Convert: give +1 accuracy stat as permanent reward
+            from src.career.player import MAX_STAT
+            player.stats["accuracy"] = min(MAX_STAT,
+                                           player.stats.get("accuracy", 50) + 1)
+            player.prototype_club = None
+            player.gain_reputation(3)
+            # Signal conversion via a log entry so it surfaces in the results screen
+            if player.career_log:
+                player.career_log[-1]["prototype_converted"] = True
 
     player._check_achievements()
     return {"position": position, "prize": prize, "points": pts,

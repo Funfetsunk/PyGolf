@@ -36,12 +36,12 @@ MAJORS: dict[str, dict] = {
 MAJOR_ORDER = ["green_jacket", "heritage_open", "royal_championship", "grand_classic"]
 
 # Grand Tour season event-number (1-based) → major_id
-# Season has 18 events; majors at 4, 9, 14, 18
+# Season has 22 events; skills events precede each major; majors at 4, 10, 16, 22
 GRAND_TOUR_MAJOR_SCHEDULE: dict[int, str] = {
     4:  "green_jacket",
-    9:  "heritage_open",
-    14: "royal_championship",
-    18: "grand_classic",
+    10: "heritage_open",
+    16: "royal_championship",
+    22: "grand_classic",
 }
 
 

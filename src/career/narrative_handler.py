@@ -31,7 +31,7 @@ def _accept_best_available_sponsor(player):
     if player.active_sponsor is not None:
         return "Already have a sponsor."
     from src.career.sponsorship import get_available_sponsors
-    deals = get_available_sponsors(player.tour_level)
+    deals = get_available_sponsors(player.tour_level, player.reputation)
     if not deals:
         return "No sponsor deals available right now."
     best = max(deals, key=lambda d: d["season_bonus"])
@@ -77,18 +77,19 @@ def _reputation_5(player):
 
 
 def _equip_prototype_driver(player):
-    # Temporarily stash current club set name and give the player a
-    # random stat modifier on power/accuracy for this event only.
-    boost = random.randint(-2, 4)
-    stat  = random.choice(["power", "accuracy"])
-    player.temp_stat_modifiers[stat] = (
-        player.temp_stat_modifiers.get(stat, 0) + boost)
-    if boost > 0:
-        return f"Prototype driver: {stat.title()} +{boost} this event!"
-    elif boost == 0:
-        return "Prototype driver: no noticeable difference."
-    else:
-        return f"Prototype driver: {stat.title()} {boost} this event — rough ride."
+    max_dist = random.randint(245, 285)
+    accuracy = round(random.uniform(0.62, 0.74), 2)
+    player.prototype_club = {
+        "name":                "Prototype Driver",
+        "max_distance_yards":  max_dist,
+        "accuracy":            accuracy,
+        "can_shape":           True,
+        "is_prototype":        True,
+        "prototype_uses":      0,
+    }
+    goal = getattr(player, "prototype_uses_goal", 5)
+    return (f"Prototype Driver: {max_dist} yds, {accuracy:.0%} acc. "
+            f"Use it {goal}x and finish top 10 to unlock Accuracy +1 permanently!")
 
 
 def _set_slump_objective(player):

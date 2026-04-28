@@ -105,6 +105,8 @@ def _event_name(event_n: int, event_type: str, tour_level: int) -> str:
         return f"Event {event_n} — {tour} Stableford"
     if event_type == "proam":
         return f"Event {event_n} — {tour} Pro-Am"
+    if event_type == "skills":
+        return f"Event {event_n} — {tour} Skills Competition"
     return f"Event {event_n} — {tour} Circuit"
 
 
@@ -138,6 +140,10 @@ class CareerHubState:
         self._msg_timer = 0.0
 
         self._new_achievements: list[str] = []   # popped one by one in update
+
+        # Phase 11 — dynamic button rects rebuilt each draw frame
+        self._btn_club_fit: pygame.Rect | None = None
+        self._regrove_btns: list[tuple[str, pygame.Rect]] = []
 
         self._build_tab_rects()
         self._build_tab0_rects()
@@ -194,6 +200,20 @@ class CareerHubState:
             r  = pygame.Rect(ex + 295, by + 4, 84, 24)
             self._ball_btns.append((ball_id, r))
             by += 34
+
+        # Practice buttons — 4 buttons at the bottom of the training panel
+        pb_y = ty + CONTENT_H - 90   # near the bottom of the panel
+        self._practice_btns: list[tuple[str, pygame.Rect]] = []
+        _practice_specs = [
+            ("driving_range",    "Driving Range"),
+            ("putting_green",    "Putting Green"),
+            ("bunker_challenge", "Bunker Escape"),
+            ("cttp_standalone",  "Closest to Pin"),
+        ]
+        for pid, _ in _practice_specs:
+            r = pygame.Rect(CONTENT_X + 8, pb_y, 374, 19)
+            self._practice_btns.append((pid, r))
+            pb_y += 21
 
         # Event info panel (centre)
         cx = CONTENT_X + 390 + 10
@@ -253,6 +273,12 @@ class CareerHubState:
                 self._do_hire(hit[5:])
             elif hit.startswith("fire:"):
                 self._do_fire(hit[5:])
+            elif hit.startswith("practice:"):
+                self._do_practice(hit[9:])
+            elif hit == "fit_club":
+                self._do_fit_club()
+            elif hit.startswith("regrove:"):
+                self._do_regrove(hit[len("regrove:"):])
             elif hit.startswith("sponsor:"):
                 self._do_accept_sponsor(hit[8:])
             elif hit == "drop_sponsor":
@@ -282,6 +308,16 @@ class CareerHubState:
                 if r.collidepoint(pos):
                     owned = bid in self.player.owned_balls
                     return f"ball_select:{bid}" if owned else f"ball_buy:{bid}"
+            for pid, r in self._practice_btns:
+                if r.collidepoint(pos):
+                    return f"practice:{pid}"
+            # Phase 11 — club fitting button (shown in event panel when major)
+            if self._btn_club_fit and self._btn_club_fit.collidepoint(pos):
+                return "fit_club"
+            # Phase 11 — regrove buttons (in equipment panel maintenance section)
+            for cn, r in self._regrove_btns:
+                if r.collidepoint(pos):
+                    return f"regrove:{cn}"
         elif self._tab == 1:
             for sid, r in self._staff_btn:
                 if r.collidepoint(pos):
@@ -373,6 +409,48 @@ class CareerHubState:
         self.player.fire_staff(sid)
         self._flash(f"Released {info.get('label', sid)}.")
 
+    def _do_practice(self, pid: str):
+        _state_map = {
+            "driving_range":    "src.states.driving_range.DrivingRangeState",
+            "putting_green":    "src.states.putting_green.PuttingGreenState",
+            "bunker_challenge": "src.states.bunker_challenge.BunkerChallengeState",
+            "cttp_standalone":  "src.states.cttp_standalone.CttpStandaloneState",
+        }
+        import importlib
+        fqn = _state_map.get(pid)
+        if fqn is None:
+            return
+        module_path, cls_name = fqn.rsplit(".", 1)
+        mod = importlib.import_module(module_path)
+        cls = getattr(mod, cls_name)
+        self.game.change_state(cls(self.game))
+
+    def _do_fit_club(self):
+        p = self.player
+        if getattr(p, "club_fitting_active", None) is not None:
+            self._flash("Club fitting already booked for this event.")
+            return
+        if p.money < 500:
+            self._flash("Need $500 for club fitting.")
+            return
+        from src.golf.club import get_club_bag
+        bag = get_club_bag(p.club_set_name)
+        driver = next((c for c in bag if c.name == "Driver"), None)
+        club_name = driver.name if driver else "Driver"
+        p.spend_money(500)
+        p.club_fitting_active = {"club": club_name, "bonus": 0.05}
+        self._flash(f"Club fitting booked! {club_name} +5% acc for this major.")
+
+    def _do_regrove(self, club_name: str):
+        p = self.player
+        if p.money < 150:
+            self._flash("Need $150 to re-groove.")
+            return
+        if p.regrove_club(club_name):
+            self._flash(f"{club_name} re-grooved — accuracy restored.")
+        else:
+            self._flash("Re-groove failed.")
+
     def _do_accept_sponsor(self, sponsor_id):
         p = self.player
         if p.active_sponsor is not None:
@@ -398,6 +476,12 @@ class CareerHubState:
         import random
 
         p = self.player
+
+        # Decrement practice cooldowns so minigames unlock again next event
+        cds = getattr(p, "practice_cooldowns", {})
+        for k in list(cds):
+            if cds[k] > 0:
+                cds[k] -= 1
 
         # ── Q-School Qualifier ────────────────────────────────────────────────
         if p.qschool_pending:
@@ -428,11 +512,11 @@ class CareerHubState:
 
         # ── Normal event — read slot from season schedule ─────────────────────
         tour_id   = get_tour_id(p.tour_level)
-        total     = EVENTS_PER_SEASON.get(p.tour_level, 8)
+        schedule  = p.season_schedule
+        total     = len(schedule) if schedule else EVENTS_PER_SEASON.get(p.tour_level, 8)
         event_idx = p.events_this_season
         event_n   = event_idx + 1
 
-        schedule = p.season_schedule
         slot = (schedule[event_idx]
                 if schedule and event_idx < len(schedule)
                 else {"event_type": "regular", "format": "stroke",
@@ -445,6 +529,16 @@ class CareerHubState:
         is_opener  = slot.get("is_opener", False)
         event_type = slot.get("event_type", "regular")
         fmt        = slot.get("format", "stroke")
+
+        # ── Skills competition event ──────────────────────────────────────────
+        if event_type == "skills":
+            from src.states.skills_session import SkillsSession
+            from src.states.long_drive_state import LongDriveState
+            name    = _event_name(event_n, event_type, p.tour_level)
+            session = SkillsSession(name, p.tour_level, event_n, total)
+            self.game.current_tournament = session
+            self.game.change_state(LongDriveState(self.game))
+            return
 
         # ── Tour Championship qualification check ─────────────────────────────
         if is_finale:
@@ -733,6 +827,33 @@ class CareerHubState:
             surface.blit(bl, bl.get_rect(center=btn_r.center))
             ty += 76
 
+        # ── Practice minigames section ────────────────────────────────────────
+        pygame.draw.line(surface, C_BORDER,
+                         (r.x + 8, ty + 4), (r.right - 8, ty + 4), 1)
+        ph = self.font_small.render("PRACTICE", True, C_GOLD)
+        surface.blit(ph, (r.x + 10, ty + 8))
+
+        _practice_labels = {
+            "driving_range":    "Driving Range",
+            "putting_green":    "Putting Green",
+            "bunker_challenge": "Bunker Escape",
+            "cttp_standalone":  "Closest to Pin",
+        }
+        cooldowns = getattr(p, "practice_cooldowns", {})
+        for pid, btn_r in self._practice_btns:
+            label   = _practice_labels.get(pid, pid)
+            on_cd   = cooldowns.get(pid, 0) > 0
+            hk      = f"practice:{pid}"
+            bg      = (C_BTN_DIS if on_cd
+                       else C_BTN_HOV if self._hov == hk else C_BTN)
+            pygame.draw.rect(surface, bg, btn_r, border_radius=3)
+            pygame.draw.rect(surface, C_BORDER, btn_r, 1, border_radius=3)
+            col = C_GRAY if on_cd else C_WHITE
+            suffix = "  (done this event)" if on_cd else ""
+            ls = self.font_small.render(label + suffix, True, col)
+            surface.blit(ls, ls.get_rect(centery=btn_r.centery,
+                                         x=btn_r.x + 6))
+
     def _draw_event_panel(self, surface):
         p = self.player
         r = self._event_panel
@@ -775,6 +896,27 @@ class CareerHubState:
             mc = self.font_small.render(
                 f"Prize fund: ${major_info['prize_fund']:,}  •  2 rounds", True, C_GOLD)
             surface.blit(mc, (cx - mc.get_width() // 2, ty)); ty += 20
+
+            # Phase 11 — Club Fitting button (major only, one-time per event)
+            fitting = getattr(p, "club_fitting_active", None)
+            if fitting:
+                fit_lbl = self.font_small.render(
+                    f"Club Fitting active: {fitting['club']} +{fitting['bonus']:.0%} acc",
+                    True, C_GREEN)
+                surface.blit(fit_lbl, (cx - fit_lbl.get_width() // 2, ty)); ty += 18
+                self._btn_club_fit = None
+            else:
+                fit_btn_r = pygame.Rect(cx - 130, ty, 260, 22)
+                self._btn_club_fit = fit_btn_r
+                bg = (C_BTN_HOV if self._hov == "fit_club"
+                      else C_BTN if p.money >= 500 else C_BTN_DIS)
+                pygame.draw.rect(surface, bg, fit_btn_r, border_radius=3)
+                pygame.draw.rect(surface, C_BORDER, fit_btn_r, 1, border_radius=3)
+                fit_col = C_WHITE if p.money >= 500 else C_GRAY
+                fit_s = self.font_small.render(
+                    "Club Fitting — $500 → Driver +5% acc (this event)", True, fit_col)
+                surface.blit(fit_s, fit_s.get_rect(center=fit_btn_r.center))
+                ty += 26
 
         # Format / event-type badge
         if not p.qschool_pending and not _major:
@@ -1040,6 +1182,34 @@ class CareerHubState:
             bl = self.font_small.render(bt, True, tc)
             surface.blit(bl, bl.get_rect(center=btn_r.center))
             by += 34
+
+        # ── Phase 11: Maintenance section ─────────────────────────────────────
+        wear = getattr(p, "club_wear", {})
+        worn_clubs = [(cn, w) for cn, w in wear.items() if w > 0.02]
+        self._regrove_btns = []
+        if worn_clubs:
+            by += 4
+            pygame.draw.line(surface, C_BORDER,
+                             (r.x + 10, by - 2), (r.right - 10, by - 2), 1)
+            mh = self.font_hdr.render("MAINTENANCE", True, C_GOLD)
+            surface.blit(mh, (r.x + 12, by)); by += 20
+            for cn, w in worn_clubs:
+                pct = int(w * 100)
+                wl = self.font_small.render(
+                    f"{cn}: worn (−{pct}% acc)", True, (220, 160, 80))
+                surface.blit(wl, (r.x + 10, by))
+                btn_r = pygame.Rect(r.right - 105, by - 2, 95, 18)
+                self._regrove_btns.append((cn, btn_r))
+                hk = f"regrove:{cn}"
+                can = p.money >= 150
+                bg = (C_BTN_HOV if self._hov == hk
+                      else C_BTN if can else C_BTN_DIS)
+                pygame.draw.rect(surface, bg, btn_r, border_radius=3)
+                pygame.draw.rect(surface, C_BORDER, btn_r, 1, border_radius=3)
+                rl = self.font_small.render(
+                    "Re-groove $150", True, C_WHITE if can else C_GRAY)
+                surface.blit(rl, rl.get_rect(center=btn_r.center))
+                by += 22
 
     # ── Tab 1 — Staff ─────────────────────────────────────────────────────────
 
@@ -1388,6 +1558,13 @@ class CareerHubState:
             surface.blit(none_s, (rx, rty)); rty += 15
 
         rty += 8
+
+        # CttP personal best
+        cttp_best = getattr(p, "cttp_best_yards", None)
+        cb_s = self.font_small.render(
+            f"CttP Best: {cttp_best:.1f}y" if cttp_best is not None else "CttP Best: —",
+            True, C_GOLD if cttp_best is not None else C_GRAY)
+        surface.blit(cb_s, (rx, rty)); rty += 18
 
         # Season arc status
         try:

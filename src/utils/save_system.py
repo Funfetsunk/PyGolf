@@ -21,7 +21,7 @@ from src.career.player import Player
 from src.utils import web
 
 SAVE_DIR    = "saves"
-SAVE_FORMAT = 5   # v5: Phase 6 extended achievements, course records, hole-in-ones, wins_per_tour
+SAVE_FORMAT = 8   # v8: Phase 11 club_fitting_active, prototype_club, club_wear
 
 # localStorage key prefix — namespaces our saves so we don't collide with
 # anything else on the same origin (e.g. if hosted alongside other apps).
@@ -153,6 +153,12 @@ def load_game(path: str):
     # v3 → v4: Phase 5 fields (rival_name, reputation, narrative_events_seen, arcs)
     #           default in Player.from_dict; no data surgery needed.
     # v4 → v5: Phase 6 fields (wins_per_tour, course_records, hole_in_ones)
+    #           default in Player.from_dict; no data surgery needed.
+    # v5 → v6: Phase 7 fields (practice_cooldowns, cttp_best_yards,
+    #           practice_stat_seasons, temp_event_buffs)
+    #           default in Player.from_dict; no data surgery needed.
+    # v6 → v7: Phase 10 field (career_season) defaults in Player.from_dict.
+    # v7 → v8: Phase 11 fields (club_fitting_active, prototype_club, club_wear)
     #           default in Player.from_dict; no data surgery needed.
 
     try:
