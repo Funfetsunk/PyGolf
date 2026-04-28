@@ -167,9 +167,32 @@ class YearEndAwardsState:
             if event.key in (pygame.K_RETURN, pygame.K_SPACE):
                 self._on_continue()
 
+    def _check_arc(self, p) -> None:
+        """Grant the season arc reward if the player met the objective."""
+        if getattr(p, "arc_completed", False):
+            return
+        from src.data.narrative_events import get_arc, check_arc_complete
+        arc = get_arc(getattr(p, "current_arc_id", None))
+        if arc is None:
+            return
+        met = False
+        if arc.get("metric") == "season_position":
+            met = self._player_pos <= arc.get("target", 1)
+        else:
+            met = check_arc_complete(p, arc)
+        if met:
+            p.arc_completed = True
+            reward = arc.get("reward_money", 0)
+            if reward:
+                p.earn_money(reward)
+                p.total_earnings += reward
+
     def _on_continue(self):
         p    = self.player
         info = self._promo_info
+
+        # ── Check season arc completion ───────────────────────────────────────
+        self._check_arc(p)
 
         # ── Apply awards ──────────────────────────────────────────────────────
         season_label = f"S{p.season}"
