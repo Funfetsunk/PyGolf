@@ -2,7 +2,7 @@
 
 All notable changes to Let's Golf! are documented here.
 
-## [Unreleased] — Bug Fixes (review follow-up)
+## 2026-04-28 — Bug Fixes (review follow-up)
 
 ### Fixed
 - **`temp_stat_modifiers` bleed** — narrative event effects (e.g. "Fitness -5 this event") are now cleared immediately after being read at the start of each `GolfRoundState`, preventing them from persisting into future events across the entire career.
@@ -12,7 +12,7 @@ All notable changes to Let's Golf! are documented here.
 
 ---
 
-## [Unreleased] — Phases 7–11: Practice, Awards, Equipment & Career Depth
+## Planned — Phases 7–11: Practice, Awards, Equipment & Career Depth
 
 ### Added
 
@@ -62,7 +62,7 @@ All notable changes to Let's Golf! are documented here.
 
 ---
 
-## [Unreleased] — Phases 4–6: Season Structure, Rivals & Narrative
+## 2026-04-27 — Phases 4–6: Season Structure, Rivals & Narrative
 
 ### Added
 
@@ -103,7 +103,7 @@ All notable changes to Let's Golf! are documented here.
 
 ---
 
-## [Unreleased] — Phase 2: Match Play Format
+## 2026-04-24 — Phase 2: Match Play Format
 
 ### Added
 
@@ -144,7 +144,7 @@ All notable changes to Let's Golf! are documented here.
 
 ---
 
-## [Unreleased] — Phase 1: Course Conditions & Scoring
+## 2026-04-24 — Phase 1: Course Conditions & Scoring
 
 ### Added
 
