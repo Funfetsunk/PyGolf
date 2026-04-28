@@ -28,7 +28,7 @@ python main.py
 
 ## What Is It?
 
-Let's Golf! is a full career golf game where you create a golfer and guide them from local amateur tournaments all the way to the sport's biggest stage. Between rounds you train your stats, upgrade your clubs, hire staff, and sign sponsorship deals.
+Let's Golf! is a full career golf game where you create a golfer and guide them from local amateur tournaments all the way to the sport's biggest stage. Between rounds you train your stats, upgrade your clubs, hire staff, sign sponsorship deals, and take on practice activities to sharpen your game.
 
 The game is entirely mouse-driven and plays out in top-down 2D with tile-based courses.
 
@@ -51,6 +51,7 @@ The game is entirely mouse-driven and plays out in top-down 2D with tile-based c
 ## Features
 
 ### On the Course
+
 - **Click-drag-release** shot mechanic with a live power bar and aim line
 - **Shot shaping** — play Draws (right-to-left curve) and Fades (left-to-right) as well as straight shots
 - **Wind** — randomised direction and strength each hole, shown by a compass arrow in the HUD
@@ -69,47 +70,115 @@ The game is entirely mouse-driven and plays out in top-down 2D with tile-based c
 - **Putting** — putter auto-selects on the green; short putts are unaffected by wind
 - **Hole-in-one, Eagle, Birdie, Par, Bogey** — all called out with sound and colour
 
+### Course Conditions
+
+Every tournament generates a unique setup that affects how the course plays:
+
+- **Pin Positions** — each hole is assigned a Front, Standard, or Tucked pin; Majors always use Tucked
+- **Green Speed** — Slow / Normal / Fast / Slick; scales putter distance (0.85× to 1.35×)
+- **Fairway Firmness** — Soft / Normal / Firm / Hard; affects how far the ball rolls after landing (0.70× to 1.45×)
+- **Weather** — Clear / Rain / Cold / Heat / Fog; each applies distinct distance and accuracy modifiers; fog adds a tint overlay
+- **Major Hard Setup** — Majors enforce tucked pins, fast or better greens, and a minimum wind of 2 (never calm)
+- **Conditions HUD Panel** — a compact 2×2 grid in the HUD shows Pin / Greens / Ground / Weather for the current round, colour-coded by difficulty
+
+### Event Formats
+
+Three scoring formats appear across the tour schedule:
+
+- **Stroke Play** — standard format; lowest total strokes wins
+- **Stableford** — points per hole (Albatross 5 · Eagle 4 · Birdie 3 · Par 2 · Bogey 1 · Double bogey+ 0); highest points wins; leaderboards show a **Pts** column
+- **Match Play Championship** — bracket event on Tour 2 and above; the player faces up to 4 opponents (Quarter-Final → Semi-Final → Final). Win a hole to go 1 UP; tie a hole to halve it. Match ends early when a player's lead exceeds the remaining holes. A live match status overlay tracks the standing hole by hole, and a dedicated Match Result screen follows each match
+- **Skills Competition** — long-drive format event on Tours 3–6; a `LongDriveState` session tracked by `SkillsSession`; precedes each major on Tour 6
+- **Skins** — each hole has a cash value; tie a hole and the skin carries over
+
 ### Career Progression
 
-Six tour levels, each with its own schedule, courses, prize fund, and AI field:
+Six tour levels, each with its own season schedule, courses, prize fund, and AI field:
 
-| Level | Tour | Events | Prize Fund |
+| Level | Tour | Events/Season | Prize Fund |
 |---|---|---|---|
-| 1 | Amateur Circuit | 8 | Trophies only |
-| 2 | Challenger Tour | 10 | Small |
-| 3 | Development Tour | 12 | Medium |
-| 4 | Continental Tour | 14 | Good |
-| 5 | World Tour | 16 | Large |
-| 6 | The Grand Tour | 18 | Major prize |
+| 1 | Amateur Tour | 8 | — |
+| 2 | Challenger Tour | 10 | $10,000 |
+| 3 | Development Tour | 13 | $25,000 |
+| 4 | Continental Tour | 15 | $75,000 |
+| 5 | World Tour | 17 | $200,000 |
+| 6 | The Grand Tour | 22 | $1,000,000 |
 
+- Season schedules are **deterministic** — event types (stroke play, match play, stableford, skins, skills, majors) appear at fixed positions each season
+- Each season ends with a **Tour Championship** finale; the winner earns a `promotion_wildcard` and is promoted regardless of standings points
 - Finish in the **top positions** at season end to earn promotion
-- Tour 4 → 5 requires passing a **Q-School Qualifier** against a World Tour field
+- Tour 4 → 5 requires passing a **Q-School Qualifier** against a World Tour field (two attempts per eligible season)
 - Tour 5 → 6 also requires a **World Ranking of top 50**
+- Each tour/season combination has a named **Season Arc** — a specific objective with a money reward (e.g. "The Rookie Year — finish top 3 in standings"); unspecified combinations fall back to a generic arc
 
 ### Between Rounds — Career Hub
 
-- **Training** — spend prize money to raise any of your 6 stats (Power, Accuracy, Short Game, Putting, Mental, Fitness). Each stat directly affects your shots in play.
-- **Equipment** — upgrade your club set through 6 tiers (Starter → Professional), unlocked as you reach higher tours
-- **Staff** *(Continental Tour and above)* — hire a Coach, Caddie, Sports Psychologist, or Fitness Trainer, each giving permanent stat bonuses
-- **Sponsors** *(Continental Tour and above)* — sign deals for a signing fee and a season bonus if you hit a performance target (top-5 finishes, wins, etc.)
-- **Career Stats** — full career history, achievements, world ranking, majors won
+**Training**
+- Spend prize money to raise any of your 6 stats: Power, Accuracy, Short Game, Putting, Mental, Fitness
+- Each stat directly affects your shots in play
+- Four **Practice Minigames** are available from the Training panel between events (each has a one-event cooldown):
+  - **Driving Range** — maximize carry distance
+  - **Putting Green** — sink putts for stat XP
+  - **Bunker Escape** — escape sand within a shot limit
+  - **Closest to Pin** — approach shots judged by proximity
+
+**Equipment**
+- Upgrade your club set through 6 tiers (Starter → Professional), unlocked as you reach higher tours
+- **Club Fitting** *(before a major)* — spend $500 to fit your Driver for +5% accuracy for that event only
+- **Club Wear** — clubs accumulate accuracy loss over repeated use; visible in the Equipment panel
+- **Re-groove** — spend $150 in the Maintenance section to reset wear on any degraded club
+- **Prototype Driver** — obtainable via narrative event; use it 5× and finish top 10 to permanently unlock Accuracy +1
+
+**Staff** *(Continental Tour and above)*
+- Hire a Coach, Caddie, Sports Psychologist, or Fitness Trainer, each giving permanent stat bonuses
+
+**Sponsors** *(Continental Tour and above)*
+- Sign deals for a signing fee plus a season bonus if you hit a performance target (top-5 finishes, wins, etc.)
+- Sponsor availability is gated by your **Reputation** — earned by winning events and majors
+
+**Career Stats**
+- Full career history in a 3-column layout: season stats, career totals, and format/achievement progress
+- Achievements across scoring, format, adversity, and rival categories
+
+### Narrative Events
+
+Between events the game can trigger a **Narrative Event** screen offering a choice between two options. Effects include signing a sponsor, temporary stat buffs or debuffs, skipping an event, equipping a prototype club, or setting a slump objective. Events are gated by tour level, season, and career state.
+
+### Rival System
+
+- After each stroke-play event, opponents who finish within 3 strokes accumulate `close_finishes`; once any opponent reaches 5 close finishes they become your rival (one rival per career)
+- **Head-to-head record** (W / L / Halved) is tracked against your rival each event
+- Rival name and H2H record appear in the Hall of Fame
+
+### World Rankings & Year-End Awards
+
+- From the Continental Tour onward, every result earns ranking points against a field of 200 simulated professionals
+- Reaching World No. 1 is the final career milestone
+- At season end, a **Year-End Awards** screen recognises seasonal achievements; `previous_season_position` powers the award logic
+- From career season 5 onward, **Fitness degrades** by 1 point per season (floor: 40), modelling the physical toll of a long career
 
 ### The Grand Tour & Majors
 
-Four major championships are held at fixed points in the Grand Tour season:
+Four major championships are held at fixed points in the 22-event Grand Tour season (events 4, 10, 16, 22), each preceded by a Skills Competition:
 
 - The Green Jacket Invitational
 - The Heritage Open
 - The Royal Championship
 - The Grand Classic
 
-Majors are 2-round events with prize funds of up to $5,000,000 and award double world ranking points.
+Majors are 2-round events with a prize fund of $4,500,000 and award double world ranking points.
 
 **Win condition:** win all 4 Majors AND reach World No. 1.
 
-### World Rankings
+### Hall of Fame
 
-From the Continental Tour onward, every result earns ranking points. You are ranked against a field of 200 simulated professionals — reaching No. 1 is the final milestone of the career.
+The Hall of Fame screen is a four-box layout:
+- **Top-left** — Major Championships (each major shown with ★ won / ○ not yet)
+- **Top-right** — Career Statistics (seasons, events, wins, top-5/top-10, best round, earnings, peak world rank)
+- **Bottom-left** — Rival & Year-End Awards (rival name, head-to-head record, awards list)
+- **Bottom-right** — Achievements
+
+A **Grand Slam Champion · World No. 1** banner appears when both conditions are met simultaneously.
 
 ### Saving
 
@@ -128,7 +197,7 @@ PyGolf/
 │   ├── game.py          ← state machine & main loop
 │   ├── career/          ← player, opponents, tournaments, staff, sponsors, rankings
 │   ├── course/          ← hole layout, renderer, course loader
-│   ├── data/            ← courses, tour configs, opponent pools
+│   ├── data/            ← courses, tour configs, opponent pools, schedule templates
 │   ├── golf/            ← ball physics, shot mechanics, clubs, terrain
 │   ├── states/          ← one file per screen (menu, hub, round, results…)
 │   ├── ui/              ← HUD, scorecard
