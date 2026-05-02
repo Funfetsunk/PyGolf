@@ -72,21 +72,22 @@ class SkillsSession:
         if wins > 0:
             player.gain_reputation(wins * 5)
 
-        # Temp stat buffs for won comps (cleared at start of next round)
+        # Temp stat buffs for won comps.
+        # 2/3 wins → buff lasts the full following event (temp_event_buffs).
+        # Fewer wins → one-shot buff only (temp_stat_modifiers).
+        target = player.temp_event_buffs if wins >= 2 else player.temp_stat_modifiers
+
         if self.skills_result.get("long_drive", {}) and \
                 self.skills_result["long_drive"].get("won"):
-            player.temp_stat_modifiers["power"] = (
-                player.temp_stat_modifiers.get("power", 0) + 2)
+            target["power"] = target.get("power", 0) + 2
 
         if self.skills_result.get("cttp", {}) and \
                 self.skills_result["cttp"].get("won"):
-            player.temp_stat_modifiers["short_game"] = (
-                player.temp_stat_modifiers.get("short_game", 0) + 2)
+            target["short_game"] = target.get("short_game", 0) + 2
 
         if self.skills_result.get("putting", {}) and \
                 self.skills_result["putting"].get("won"):
-            player.temp_stat_modifiers["putting"] = (
-                player.temp_stat_modifiers.get("putting", 0) + 2)
+            target["putting"] = target.get("putting", 0) + 2
 
         # Event counter
         player.events_this_season += 1

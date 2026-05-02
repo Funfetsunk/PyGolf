@@ -39,6 +39,13 @@ is_finale     : True for the season-closing Tour Championship
 starting_score_offset : dict mapping names to stroke adjustments for the
                 Tour Championship (top 3 in standings get -3/-2/-1)
 promotion_wildcard : True when the player wins the Tour Championship
+
+Phase 8 additions
+-----------------
+skills_result : None for non-skills events; populated by SkillsSession.finalise()
+                for skills events — stores wins and rewards applied.
+                (Skills events use SkillsSession as game.current_tournament, so
+                this field is kept for completeness / future use.)
 """
 
 # ── Scoring format constants ──────────────────────────────────────────────────
@@ -247,6 +254,10 @@ class Tournament:
             self.wind_strength_floor = 2
         else:
             self.wind_strength_floor = 0
+
+        # ── Skills event result (Phase 8) ────────────────────────────────────
+        # Populated by SkillsSession.finalise(); None for non-skills events.
+        self.skills_result: dict | None = None
 
         # ── Skins / Pro-Am initial state (Phase 3) ───────────────────────────
         self.skin_value: int             = (SKIN_VALUES.get(tour_level, 500)
@@ -686,6 +697,8 @@ class Tournament:
             "is_finale":              self.is_finale,
             "starting_score_offset":  dict(self.starting_score_offset),
             "promotion_wildcard":     self.promotion_wildcard,
+            # Phase 8 — skills event result
+            "skills_result":          self.skills_result,
         }
 
     @classmethod
@@ -736,4 +749,6 @@ class Tournament:
         t.is_finale              = data.get("is_finale",              False)
         t.starting_score_offset  = dict(data.get("starting_score_offset", {}))
         t.promotion_wildcard     = data.get("promotion_wildcard",     False)
+        # Phase 8 — skills event result
+        t.skills_result          = data.get("skills_result",          None)
         return t
