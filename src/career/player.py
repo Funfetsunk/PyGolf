@@ -165,6 +165,7 @@ class Player:
         self.year_end_awards: list[str] = []
         self.seasons_on_current_tour: int = 1
         self.world_rank_peak: int = 201
+        self.completed_arcs: list[str] = []
 
         # Phase 10 — multi-year career
         self.career_season: int = 1
@@ -596,6 +597,7 @@ class Player:
             "year_end_awards":          list(self.year_end_awards),
             "seasons_on_current_tour":  self.seasons_on_current_tour,
             "world_rank_peak":          self.world_rank_peak,
+            "completed_arcs":           list(self.completed_arcs),
             # Phase 10
             "career_season":            self.career_season,
             # Phase 11
@@ -684,6 +686,7 @@ class Player:
         p.year_end_awards          = data.get("year_end_awards", [])
         p.seasons_on_current_tour  = data.get("seasons_on_current_tour", 1)
         p.world_rank_peak          = data.get("world_rank_peak", 201)
+        p.completed_arcs           = data.get("completed_arcs", [])
         # Phase 10 — default to p.season for old saves (equivalent tracking)
         p.career_season            = data.get("career_season", p.season)
         # Phase 11

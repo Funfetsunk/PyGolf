@@ -182,6 +182,13 @@ class YearEndAwardsState:
             met = check_arc_complete(p, arc)
         if met:
             p.arc_completed = True
+            arc_title = arc.get("title", p.current_arc_id or "Season Arc")
+            completed = getattr(p, "completed_arcs", None)
+            if completed is None:
+                p.completed_arcs = []
+                completed = p.completed_arcs
+            if arc_title not in completed:
+                completed.append(arc_title)
             reward = arc.get("reward_money", 0)
             if reward:
                 p.earn_money(reward)

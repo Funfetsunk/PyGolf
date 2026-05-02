@@ -193,7 +193,10 @@ class HallOfFameState:
         sh = self.font_hdr.render("CAREER STATISTICS", True, C_GOLD)
         surface.blit(sh, (rx + 12, row1_y + 7))
         best_r = p.best_round
-        best_str = (f"{best_r:+d}" if best_r is not None else "—")
+        best_course = next(
+            (e.get("course", "") for e in reversed(p.career_log)
+             if e.get("diff") == best_r and best_r is not None), "")
+        best_str = (f"{best_r:+d}  {best_course}" if best_r is not None else "—")
         peak_rank = getattr(p, "world_rank_peak", p.world_rank)
         stat_rows = [
             ("Seasons",          str(p.season - 1)),
@@ -236,13 +239,20 @@ class HallOfFameState:
         if awards:
             aw_h = self.font_small.render(f"Awards won ({len(awards)}):", True, C_GOLD2)
             surface.blit(aw_h, (lx + 12, ry)); ry += 18
-            # Show up to 4 most recent
-            for aw in awards[-4:]:
+            # Show up to 3 most recent to leave room for arcs
+            for aw in awards[-3:]:
                 aw_s = self.font_small.render(f"  • {aw.replace('_', ' ').title()}", True, C_WHITE)
                 surface.blit(aw_s, (lx + 12, ry)); ry += 16
         else:
             aw_s = self.font_small.render("No year-end awards.", True, C_GRAY)
-            surface.blit(aw_s, (lx + 12, ry))
+            surface.blit(aw_s, (lx + 12, ry)); ry += 16
+
+        completed_arcs = getattr(p, "completed_arcs", [])
+        arc_count = len(completed_arcs)
+        arc_s = self.font_small.render(
+            f"Season Arcs: {arc_count} completed", True,
+            C_GOLD2 if arc_count else C_GRAY)
+        surface.blit(arc_s, (lx + 12, ry))
 
         # ── Bottom-right: Achievements ────────────────────────────────────────
         from src.career.player import ACHIEVEMENTS
