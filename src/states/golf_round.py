@@ -165,13 +165,8 @@ class GolfRoundState:
         self._flag_time       = 0.0
         self._score_snd_played = False
 
-        # Start ambient sound (birds for lower tours, crowd for higher)
         from src.utils.sound_manager import SoundManager
-        _snd = SoundManager.instance()
-        if game.player and game.player.tour_level >= 4:
-            _snd.play_ambient("ambient_crowd")
-        else:
-            _snd.play_ambient("ambient_birds")
+        SoundManager.instance().play_ambient("ambient_birds")
 
         # Last safe ball position (for water drop / tree bounce)
         self._last_safe_x        = tee_wx

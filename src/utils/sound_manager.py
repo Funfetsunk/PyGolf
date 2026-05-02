@@ -17,9 +17,7 @@ Sound IDs
   birdie          two-note ascending jingle
   eagle           three-note ascending jingle
   hole_in_one     short fanfare
-  crowd_cheer     burst of crowd noise
   ambient_birds   (looping) outdoor birdsong
-  ambient_crowd   (looping) crowd murmur
 
 Volume
 ------
@@ -320,7 +318,7 @@ class SoundManager:
         if sid == "ambient_birds":
             self._bird_mode  = True
             self._bird_timer = self._bird_rng.uniform(4.0, 10.0)
-        elif sid != "ambient_crowd":
+        else:
             s = self._sounds.get(sid)
             if s:
                 self._ambient_channel = s.play(loops=-1)
