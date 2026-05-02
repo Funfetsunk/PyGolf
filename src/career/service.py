@@ -41,6 +41,8 @@ def process_tournament_result(player, tournament) -> dict:
 
         if position == 1:
             player.career_wins += 1
+        if position <= 3:
+            player.career_top3 += 1
         if position <= 5:
             player.career_top5 += 1
         if position <= 10:
@@ -85,6 +87,7 @@ def process_tournament_result(player, tournament) -> dict:
         t_type = player.active_sponsor["target"]["type"]
         inc = False
         if t_type == "win"    and position == 1:  inc = True
+        if t_type == "top3"   and position <= 3:  inc = True
         if t_type == "top5"   and position <= 5:  inc = True
         if t_type == "top10"  and position <= 10: inc = True
         if t_type == "played":                    inc = True

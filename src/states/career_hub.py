@@ -18,7 +18,7 @@ from src.career.player    import STAT_KEYS, BASE_STAT, MAX_STAT, ACHIEVEMENTS
 from src.career.tournament import (TOUR_DISPLAY_NAMES, EVENTS_PER_SEASON,
                                    TOUR_CHAMPIONSHIP_QUALIFIERS)
 from src.career.staff      import STAFF_TYPES, STAFF_ORDER
-from src.career.sponsorship import get_available_sponsors, is_target_met, progress_label
+from src.career.sponsorship import get_offer_group, is_target_met, progress_label
 from src.constants          import SCREEN_W, SCREEN_H
 from src.ui                 import fonts
 from src.ui.flags           import draw_flag, FLAG_W, FLAG_H
@@ -456,14 +456,13 @@ class CareerHubState:
         if p.active_sponsor is not None:
             self._flash("You already have an active sponsor. Drop it first.")
             return
-        from src.career.sponsorship import SPONSORS
-        deal = next((s for s in SPONSORS if s["id"] == sponsor_id), None)
+        dismissed = getattr(p, "sponsor_dismissed_ids", [])
+        offer = get_offer_group(p.tour_level, dismissed)
+        deal = next((s for s in offer if s["id"] == sponsor_id), None)
         if deal is None:
             return
-        if deal["min_tour"] > p.tour_level:
-            self._flash(f"Requires Tour Level {deal['min_tour']}")
-            return
-        p.accept_sponsor(deal)
+        group_ids = [s["id"] for s in offer]
+        p.accept_sponsor(deal, group_ids)
         self._flash(f"Signed with {deal['name']}! +${deal['signing_fee']:,} signing fee.")
 
     def _play_event(self):
@@ -1280,59 +1279,59 @@ class CareerHubState:
         r_list   = self._sponsor_list_panel
         r_active = self._sponsor_active_panel
 
-        # ── Available sponsors ────────────────────────────────────────────────
+        # ── Current offer group ───────────────────────────────────────────────
         pygame.draw.rect(surface, C_PANEL, r_list, border_radius=6)
         pygame.draw.rect(surface, C_BORDER, r_list, 1, border_radius=6)
-        self._section_hdr(surface, "AVAILABLE SPONSORS", r_list.x, r_list.y, r_list.width)
+        self._section_hdr(surface, "SPONSOR OPPORTUNITIES", r_list.x, r_list.y, r_list.width)
 
-        available = get_available_sponsors(p.tour_level, getattr(p, "reputation", 0))
+        dismissed = getattr(p, "sponsor_dismissed_ids", [])
+        offer     = get_offer_group(p.tour_level, dismissed)
+        has_any   = p.active_sponsor is not None
         self._sponsor_btns = []
-        sy = r_list.y + 46
-        row_h = 90
+        sy    = r_list.y + 46
+        row_h = 98
 
-        for deal in available:
-            locked  = deal["min_tour"] > p.tour_level
-            active  = p.active_sponsor and p.active_sponsor["id"] == deal["id"]
-            has_any = p.active_sponsor is not None
+        if offer and not has_any:
+            sub = self.font_small.render(
+                "Choose one — the others will become permanently unavailable.",
+                True, (160, 140, 80))
+            surface.blit(sub, (r_list.x + 10, sy))
+            sy += 20
+
+        for deal in offer:
+            total_val = deal["signing_fee"] + deal["season_bonus"]
 
             row_r = pygame.Rect(r_list.x + 8, sy, r_list.width - 16, row_h - 6)
-            bg    = (C_SPONSOR_ACT if active else
-                     (20, 26, 20) if locked else C_PANEL)
+            bg    = C_PANEL
             pygame.draw.rect(surface, bg, row_r, border_radius=4)
             pygame.draw.rect(surface, C_BORDER, row_r, 1, border_radius=4)
 
             tx, ty_row = row_r.x + 10, row_r.y + 8
-            ns = self.font_hdr.render(deal["name"], True,
-                                      C_GOLD if active else
-                                      C_GRAY if locked else C_WHITE)
+            ns = self.font_hdr.render(deal["name"], True, C_WHITE)
             surface.blit(ns, (tx, ty_row))
 
             ds = self.font_small.render(deal["description"], True, C_GRAY)
             surface.blit(ds, (tx, ty_row + 20))
 
             fs = self.font_small.render(
-                f"Sign fee: ${deal['signing_fee']:,}   "
-                f"Season bonus: ${deal['season_bonus']:,}",
+                f"Sign: ${deal['signing_fee']:,}   "
+                f"Bonus: ${deal['season_bonus']:,}   "
+                f"Total: ${total_val:,}",
                 True, C_GOLD)
             surface.blit(fs, (tx, ty_row + 38))
 
             # Accept button
-            btn_r = pygame.Rect(row_r.right - 115, row_r.y + (row_h - 6 - 28) // 2,
+            btn_r = pygame.Rect(row_r.right - 115,
+                                 row_r.y + (row_h - 6 - 28) // 2,
                                  105, 28)
             self._sponsor_btns.append((deal["id"], btn_r))
 
-            if active:
-                btn_bg = C_BTN_DIS
-                btn_txt = "Active"
-            elif has_any:
-                btn_bg = C_BTN_DIS
+            if has_any:
+                btn_bg  = C_BTN_DIS
                 btn_txt = "Drop first"
-            elif locked:
-                btn_bg = C_BTN_DIS
-                btn_txt = "Locked"
             else:
-                hk = f"sponsor:{deal['id']}"
-                btn_bg = C_BTN_HOV if self._hov == hk else C_BTN
+                hk      = f"sponsor:{deal['id']}"
+                btn_bg  = C_BTN_HOV if self._hov == hk else C_BTN
                 btn_txt = "Accept"
             pygame.draw.rect(surface, btn_bg, btn_r, border_radius=4)
             pygame.draw.rect(surface, C_BORDER, btn_r, 1, border_radius=4)
@@ -1341,6 +1340,20 @@ class CareerHubState:
 
             sy += row_h
 
+        if not offer and not has_any:
+            nm = self.font_med.render("No opportunities available.", True, C_GRAY)
+            surface.blit(nm, (r_list.x + 12, sy + 8))
+            nm2 = self.font_small.render(
+                "Complete your active contract to unlock the next group.",
+                True, (80, 80, 80))
+            surface.blit(nm2, (r_list.x + 12, sy + 30))
+
+        if has_any and not offer:
+            nm = self.font_small.render(
+                "New opportunities will appear once your contract ends.",
+                True, (80, 80, 80))
+            surface.blit(nm, (r_list.x + 12, sy + 8))
+
         # ── Active contract ───────────────────────────────────────────────────
         pygame.draw.rect(surface, C_PANEL, r_active, border_radius=6)
         pygame.draw.rect(surface, C_BORDER, r_active, 1, border_radius=6)
@@ -1348,8 +1361,7 @@ class CareerHubState:
 
         if p.active_sponsor is None:
             ns = self.font_med.render("No active sponsor", True, C_GRAY)
-            surface.blit(ns, (r_active.x + 12,
-                               r_active.y + 50))
+            surface.blit(ns, (r_active.x + 12, r_active.y + 50))
         else:
             sp   = p.active_sponsor
             prog = p.sponsor_progress
@@ -1366,15 +1378,17 @@ class CareerHubState:
             pc  = self.font_med.render(pl, True, C_GREEN if met else C_GOLD)
             surface.blit(pc, (r_active.x + 12, ty2)); ty2 += 26
 
+            total_val = sp["signing_fee"] + sp["season_bonus"]
             bonus_s = self.font_med.render(
-                f"Season bonus: ${sp['season_bonus']:,}", True, C_GOLD)
+                f"Bonus: ${sp['season_bonus']:,}  (Total: ${total_val:,})",
+                True, C_GOLD)
             surface.blit(bonus_s, (r_active.x + 12, ty2)); ty2 += 26
 
             if met:
                 ms = self.font_hdr.render("TARGET MET!", True, C_GREEN)
                 surface.blit(ms, (r_active.x + 12, ty2)); ty2 += 24
 
-            # Drop button
+            # Drop button — warn that this dismisses the sponsor permanently.
             self._btn_drop_sponsor = pygame.Rect(
                 r_active.x + 12, ty2 + 10, 140, 28)
             hk = "drop_sponsor"
@@ -1383,6 +1397,8 @@ class CareerHubState:
             pygame.draw.rect(surface, C_BORDER, self._btn_drop_sponsor, 1, border_radius=4)
             dl = self.font_small.render("Drop Contract", True, C_WHITE)
             surface.blit(dl, dl.get_rect(center=self._btn_drop_sponsor.center))
+            warn = self.font_small.render("(forfeits deal permanently)", True, (140, 60, 60))
+            surface.blit(warn, (r_active.x + 12, self._btn_drop_sponsor.bottom + 4))
 
     # ── Tab 3 — Career Stats ──────────────────────────────────────────────────
 
@@ -1624,9 +1640,10 @@ class CareerHubState:
                 if p.money >= min_cost:
                     return 1
 
-        # 3. Sponsors: tour 4+ with no active sponsor and at least one offer.
-        if p.tour_level >= 4 and p.active_sponsor is None:
-            if get_available_sponsors(p.tour_level, getattr(p, "reputation", 0)):
+        # 3. Sponsors: no active sponsor and an offer group is available.
+        if p.active_sponsor is None:
+            dismissed = getattr(p, "sponsor_dismissed_ids", [])
+            if get_offer_group(p.tour_level, dismissed):
                 return 2
 
         return None

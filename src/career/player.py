@@ -5,7 +5,7 @@ Player — the human golfer's profile, stats, inventory, and career history.
 from src.golf.club         import STARTER_BAG, get_club_bag, CLUB_SETS, CLUB_SET_ORDER
 from src.golf.ball_types   import BALL_TYPES, BALL_ORDER
 from src.career.staff       import STAFF_TYPES
-from src.career.sponsorship import is_target_met
+from src.career.sponsorship import is_target_met, get_group_sibling_ids
 from src.career.majors      import MAJOR_ORDER
 from src.data.schedule_data import generate_season_schedule
 
@@ -97,15 +97,17 @@ class Player:
 
         # Career stats
         self.career_wins:    int       = 0
+        self.career_top3:    int       = 0
         self.career_top5:    int       = 0
         self.career_top10:   int       = 0
         self.total_earnings: int       = 0
         self.best_round:     int | None = None  # best score vs par (most negative)
 
         # Staff & sponsorship
-        self.hired_staff:     list[str]   = []
-        self.active_sponsor:  dict | None = None
-        self.sponsor_progress: dict       = {}
+        self.hired_staff:          list[str]   = []
+        self.active_sponsor:       dict | None = None
+        self.sponsor_progress:     dict        = {}
+        self.sponsor_dismissed_ids: list[str]  = []
 
         # Achievements
         self.achievements: list[str] = []
@@ -289,27 +291,46 @@ class Player:
 
     # ── Sponsorship ───────────────────────────────────────────────────────────
 
-    def accept_sponsor(self, sponsor: dict) -> bool:
-        """Accept a sponsor deal.  Signing fee paid immediately."""
+    def accept_sponsor(self, sponsor: dict, group_ids: list[str] | None = None) -> bool:
+        """Accept a sponsor deal.  Signing fee paid immediately.
+
+        group_ids: all IDs in the offer group (including sponsor["id"]).
+        The non-accepted ones are added to sponsor_dismissed_ids so they
+        can never be picked again.
+        """
         if self.active_sponsor is not None:
             return False
         self.active_sponsor   = dict(sponsor)
         self.sponsor_progress = {sponsor["target"]["type"]: 0}
         self.earn_money(sponsor["signing_fee"])
+        # Dismiss all other offers from the same group.
+        if group_ids is None:
+            group_ids = get_group_sibling_ids(sponsor["id"])
+        for sid in group_ids:
+            if sid != sponsor["id"] and sid not in self.sponsor_dismissed_ids:
+                self.sponsor_dismissed_ids.append(sid)
         return True
 
     def drop_sponsor(self) -> None:
+        """Drop the active contract.  The sponsor is permanently dismissed."""
+        if self.active_sponsor is not None:
+            sid = self.active_sponsor["id"]
+            if sid not in self.sponsor_dismissed_ids:
+                self.sponsor_dismissed_ids.append(sid)
         self.active_sponsor   = None
         self.sponsor_progress = {}
 
     def _pay_out_sponsor(self) -> None:
-        """Called at season reset — pay bonus if target met."""
+        """Called at season reset — pay bonus if target met, then dismiss."""
         if self.active_sponsor is None:
             return
         if is_target_met(self.active_sponsor, self.sponsor_progress):
             bonus = self.active_sponsor["season_bonus"]
             self.earn_money(bonus)
             self.total_earnings += bonus
+        sid = self.active_sponsor["id"]
+        if sid not in self.sponsor_dismissed_ids:
+            self.sponsor_dismissed_ids.append(sid)
         self.active_sponsor   = None
         self.sponsor_progress = {}
 
@@ -532,14 +553,16 @@ class Player:
             "events_this_season": self.events_this_season,
             "opp_season_points":  dict(self.opp_season_points),
             # Phase 7 additions
-            "career_wins":        self.career_wins,
-            "career_top5":        self.career_top5,
-            "career_top10":       self.career_top10,
-            "total_earnings":     self.total_earnings,
-            "best_round":         self.best_round,
-            "hired_staff":        list(self.hired_staff),
-            "active_sponsor":     self.active_sponsor,
-            "sponsor_progress":   dict(self.sponsor_progress),
+            "career_wins":             self.career_wins,
+            "career_top3":             self.career_top3,
+            "career_top5":             self.career_top5,
+            "career_top10":            self.career_top10,
+            "total_earnings":          self.total_earnings,
+            "best_round":              self.best_round,
+            "hired_staff":             list(self.hired_staff),
+            "active_sponsor":          self.active_sponsor,
+            "sponsor_progress":        dict(self.sponsor_progress),
+            "sponsor_dismissed_ids":   list(self.sponsor_dismissed_ids),
             "achievements":         list(self.achievements),
             # Phase 8 additions
             "world_ranking_points": self.world_ranking_points,
@@ -600,6 +623,7 @@ class Player:
         p.opp_season_points   = data.get("opp_season_points", {})
         # Phase 7 additions (graceful defaults for old saves)
         p.career_wins         = data.get("career_wins", 0)
+        p.career_top3         = data.get("career_top3", 0)
         p.career_top5         = data.get("career_top5", 0)
         p.career_top10        = data.get("career_top10", 0)
         p.total_earnings      = data.get("total_earnings", 0)
@@ -607,6 +631,18 @@ class Player:
         p.hired_staff         = data.get("hired_staff", [])
         p.active_sponsor      = data.get("active_sponsor", None)
         p.sponsor_progress    = data.get("sponsor_progress", {})
+        # Migration: old saves have no dismissed_ids — skip groups from lower
+        # tour tiers so the player starts at their current tour's groups.
+        if "sponsor_dismissed_ids" not in data:
+            from src.career.sponsorship import SPONSOR_GROUPS as _SG
+            p.sponsor_dismissed_ids = []
+            for _g in _SG:
+                if _g["min_tour"] < p.tour_level:
+                    p.sponsor_dismissed_ids.extend(
+                        s["id"] for s in _g["sponsors"]
+                        if s["id"] not in p.sponsor_dismissed_ids)
+        else:
+            p.sponsor_dismissed_ids = list(data["sponsor_dismissed_ids"])
         p.achievements          = data.get("achievements", [])
         p.world_ranking_points  = data.get("world_ranking_points", 0.0)
         p.world_rank            = data.get("world_rank", 201)

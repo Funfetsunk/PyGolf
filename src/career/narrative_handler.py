@@ -30,12 +30,14 @@ def _none(player):
 def _accept_best_available_sponsor(player):
     if player.active_sponsor is not None:
         return "Already have a sponsor."
-    from src.career.sponsorship import get_available_sponsors
-    deals = get_available_sponsors(player.tour_level, player.reputation)
+    from src.career.sponsorship import get_offer_group
+    dismissed = getattr(player, "sponsor_dismissed_ids", [])
+    deals = get_offer_group(player.tour_level, dismissed)
     if not deals:
         return "No sponsor deals available right now."
     best = max(deals, key=lambda d: d["season_bonus"])
-    player.accept_sponsor(best)
+    group_ids = [d["id"] for d in deals]
+    player.accept_sponsor(best, group_ids)
     return f"Signed with {best['name']}! +${best['signing_fee']:,} signing fee."
 
 
