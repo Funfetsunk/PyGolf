@@ -319,8 +319,7 @@ class RoundSummaryState:
             surface.blit(self.font_lb.render(str(pos), True, tc),
                          (col_pos + 4, row_y + 6))
 
-            # Name (star prefix for player)
-            name_str = ("★ " + entry["name"]) if is_player else entry["name"]
+            name_str = entry["name"]
             surface.blit(self.font_lb.render(name_str, True, tc),
                          (col_name + 4, row_y + 6))
 
@@ -404,7 +403,7 @@ class RoundSummaryState:
                                  pygame.Rect(tx, row_y, tw, LB_ROW_H - 2))
             tc = C_WHITE if is_player else (200, 210, 200)
             surface.blit(self.font_lb.render(str(pos), True, tc), (col_pos + 4, row_y + 6))
-            name_str = ("★ " + entry["name"]) if is_player else entry["name"]
+            name_str = entry["name"]
             surface.blit(self.font_lb.render(name_str, True, tc), (col_name + 4, row_y + 6))
             for ri, rnd_pts in enumerate(entry["rounds"]):
                 surface.blit(self.font_lb.render(str(rnd_pts), True, tc),

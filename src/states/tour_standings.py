@@ -410,7 +410,7 @@ class TourStandingsState:
             surface.blit(self.font_small.render(str(real_pos), True, tc),
                          (col[0] + 4, ry + 3))
 
-            name_str = ("★ " + entry["name"]) if is_pl else entry["name"]
+            name_str = entry["name"]
             if is_last:
                 name_str += "   — last place"
             name_col = (210, 120, 120) if is_last else tc

@@ -217,7 +217,7 @@ class HoleTransitionState:
             vp = entry["vs_par"]
 
             surface.blit(self.font_lb.render(str(pos), True, tc), (col_pos + 4, ry + 5))
-            name_str = ("★ " + entry["name"]) if is_player else entry["name"]
+            name_str = entry["name"]
             surface.blit(self.font_lb.render(name_str, True, tc), (col_name + 4, ry + 5))
 
             vp_col = _vp_color(vp) if is_player else (
@@ -283,7 +283,7 @@ class HoleTransitionState:
             tc  = C_WHITE if is_player else (195, 205, 195)
             pts = entry["points"]
             surface.blit(self.font_lb.render(str(pos), True, tc), (col_pos + 4, ry + 5))
-            name_str = ("★ " + entry["name"]) if is_player else entry["name"]
+            name_str = entry["name"]
             surface.blit(self.font_lb.render(name_str, True, tc), (col_name + 4, ry + 5))
             pts_col = C_GREEN if (is_player and pts > holes_done * 2) else tc
             surface.blit(self.font_lb.render(str(pts), True, pts_col), (col_pts + 4, ry + 5))

@@ -312,7 +312,7 @@ class TournamentResultsState:
             surface.blit(self.font_small.render(str(real_pos), True, tc),
                          (col[0] + 4, ry + 3))
             # Name
-            name_str = ("★ " + entry["name"]) if is_pl else (("⚔ " + entry["name"]) if is_rival else entry["name"])
+            name_str = (("⚔ " + entry["name"]) if is_rival else entry["name"])
             surface.blit(self.font_small.render(name_str, True, tc),
                          (col[1] + 4, ry + 3))
             # Nationality

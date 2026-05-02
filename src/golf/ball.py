@@ -28,8 +28,8 @@ import pygame
 from src.utils.math_utils import clamp
 
 BASE_FLIGHT_DURATION = 1.1
-HOLE_CAPTURE_RADIUS  = 7     # direct landing/roll capture (~2.2 yards)
-HOLE_ROLL_RADIUS     = 12    # mid-flight "rolling over hole" capture (last 25% of flight)
+HOLE_CAPTURE_RADIUS  = 5     # direct landing/roll capture (~1.6 yards)
+HOLE_ROLL_RADIUS     = 9     # mid-flight "rolling over hole" capture (last 25% of flight)
 BALL_RADIUS          = 5
 ARC_HEIGHT           = 35
 SINK_DURATION        = 0.45
