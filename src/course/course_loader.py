@@ -101,6 +101,13 @@ def validate_course(data: dict, source: str = "<dict>") -> None:
             if not (0 <= pc < cols and 0 <= pr < rows):
                 err(f"pin {pin} is outside the {cols}x{rows} grid")
 
+        par = h.get("par", 4)
+        if par not in (3, 4, 5):
+            err(f"invalid par {par} (must be 3, 4, or 5)")
+        yardage = h.get("yardage", 0)
+        if yardage != 0 and not (100 <= yardage <= 600):
+            err(f"yardage {yardage} out of range (100–600)")
+
         flat = "".join(str(c) for row in raw_logic for c in row)
         if "X" not in flat:
             err("logic grid has no tee tile ('X')")
@@ -124,10 +131,11 @@ def _build_hole(h: dict, tilesets: dict, transparent_ids: set) -> Hole:
         raw_ground = h.get("ground") or h.get("visual")
         raw_detail = h.get("detail")
     else:
-        # v2 format: visual / attributes — migrate on the fly
+        # v2 format: visual / attributes — migrate on the fly; detail layer unavailable
         raw_logic  = h.get("attributes")
         raw_ground = h.get("visual")
         raw_detail = None
+        print(f"[loader] Warning: hole {h.get('number', '?')} is v2 format — no detail layer data")
 
     # Logic layer → list[str] (one string per row, chars are terrain codes)
     if raw_logic and len(raw_logic) == rows:
@@ -201,7 +209,9 @@ def _load_tilesets(specs: list, project_root: str) -> tuple[dict, set]:
                 if is_transparent:
                     transparent_ids.add(tid)
             except Exception:
-                pass
+                print(f"[loader] Warning: tileset '{tpath}' failed to load — using fallback colours")
+        else:
+            print(f"[loader] Warning: tileset '{tpath}' not found — using fallback colours")
 
     return sheets, transparent_ids
 

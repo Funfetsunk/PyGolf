@@ -193,6 +193,7 @@ class GolfRoundState:
         # Pause overlay (ESC) state.
         self._paused = False
         self._pause_hover = None   # "resume" or "quit"
+        self._pending_pause = False  # pause queued while ball in flight
 
         # Show a one-time tutorial modal on the player's very first round.
         # Gated by Player.tutorial_seen so it only fires once per career.
@@ -319,9 +320,11 @@ class GolfRoundState:
             return
 
         if event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
-            # Cancel any in-progress aim and open the pause menu.
-            self.shot_ctrl.cancel()
-            self._paused = True
+            if self.ball.state == BallState.AT_REST:
+                self.shot_ctrl.cancel()
+                self._paused = True
+            else:
+                self._pending_pause = True
             return
 
         if self.hole_complete:
@@ -492,6 +495,11 @@ class GolfRoundState:
             return
 
         self.ball.update(dt, self._pin_world_pos())
+
+        # Apply deferred pause once ball comes to rest.
+        if self._pending_pause and self.ball.state == BallState.AT_REST:
+            self._pending_pause = False
+            self._paused = True
 
         # ── Mid-flight tree collision ─────────────────────────────────────────
         # Check on every frame while airborne — trees block the ball immediately

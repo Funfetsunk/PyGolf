@@ -588,6 +588,7 @@ class Player:
             "close_finishes":          dict(self.close_finishes),
             "narrative_events_seen":   list(self.narrative_events_seen),
             "reputation":              self.reputation,
+            # temp_stat_modifiers intentionally omitted — runtime only, reset each session
             "slump_objective":         self.slump_objective,
             "current_arc_id":          self.current_arc_id,
             "arc_completed":           self.arc_completed,

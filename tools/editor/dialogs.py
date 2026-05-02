@@ -202,11 +202,11 @@ def save_course(course_data: dict, path: str,
 
         # Encode detail layer
         if "detail" in hole:
-            hole["detail"] = _tile_grid_to_json(hole["detail"], empty_val="")
+            hole["detail"] = _tile_grid_to_json(hole["detail"], empty_val=None)
         else:
             rows = hole.get("grid_rows", 36)
             cols = hole.get("grid_cols", 48)
-            hole["detail"] = [[""] * cols for _ in range(rows)]
+            hole["detail"] = [[None] * cols for _ in range(rows)]
 
         # Encode logic layer
         if "logic" not in hole and "attributes" in hole:

@@ -43,6 +43,8 @@ TERRAIN_PROPS = {
         'name':     'Rough',
     },
     Terrain.DEEP_ROUGH: {
+        # Near-OOB penalty: 45% distance loss + doubled scatter. Intended as
+        # a severe recovery situation, not a routine setback like plain rough.
         'dist_mod': 0.55,
         'acc_mod':  0.50,
         'color':    (28, 80, 28),

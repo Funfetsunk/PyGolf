@@ -49,6 +49,7 @@ FORMAT_SKINS       = "skins"
 FORMAT_PROAM       = "proam"
 
 # ── Course condition tables ────────────────────────────────────────────────────
+# Putter distance multipliers. A 40-yard putt becomes: slow=34, normal=40, fast=47, slick=54 yards.
 GREEN_SPEEDS = {"slow": 0.85, "normal": 1.0, "fast": 1.18, "slick": 1.35}
 
 FIRMNESS = {"soft": 0.70, "normal": 1.0, "firm": 1.20, "hard": 1.45}
