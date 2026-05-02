@@ -190,6 +190,18 @@ class GolfRoundState:
         if resume_state is not None:
             self._apply_resume_state(resume_state)
 
+        # Phase 12 — foursomes alternate-shot mode
+        # Detected from the tournament rather than passed as a constructor arg
+        # so HoleTransitionState can create new GolfRoundState without changes.
+        _t_session = game.current_tournament
+        self.alternate_shot_mode: bool = (
+            _t_session is not None
+            and getattr(_t_session, "event_type", "") == "team_event"
+            and getattr(_t_session, "foursomes_active", False)
+        )
+        self._player_turn:        bool = True    # player always starts each hole
+        self._ai_shot_in_progress: bool = False
+
         # Pause overlay (ESC) state.
         self._paused = False
         self._pause_hover = None   # "resume" or "quit"
@@ -312,6 +324,10 @@ class GolfRoundState:
         if self._show_tutorial:
             if event.type in (pygame.MOUSEBUTTONDOWN, pygame.KEYDOWN):
                 self._dismiss_tutorial()
+            return
+
+        # During alternate-shot foursomes, block all input on the AI's turn.
+        if self.alternate_shot_mode and not self._player_turn:
             return
 
         # Pause overlay — ESC toggles, clicks on its buttons act.
@@ -464,6 +480,9 @@ class GolfRoundState:
                       shape_x=result.shape_x, shape_y=result.shape_y,
                       wind_x=wind_x, wind_y=wind_y,
                       roll_dist_px=roll_dist_px)
+        # Phase 12 — hand off to AI partner after each player shot
+        if self.alternate_shot_mode:
+            self._player_turn = False
 
     def _cycle_club(self, direction):
         self.club_idx = (self.club_idx + direction) % len(self.clubs)
@@ -518,6 +537,15 @@ class GolfRoundState:
                 and self._ball_terrain() == Terrain.TREES
                 and not self._bounce_in_progress):
             self._nudge_out_of_trees()
+
+        # Phase 12 — foursomes: auto-execute AI partner shot when it's their turn
+        if (self.alternate_shot_mode
+                and not self._player_turn
+                and not self._ai_shot_in_progress
+                and not self.hole_complete
+                and self.ball.state == BallState.AT_REST
+                and self.shot_ctrl.state == ShotState.IDLE):
+            self._execute_ai_partner_shot()
 
         if self.ball.state == BallState.IN_HOLE:
             self.hole_complete  = True
@@ -642,6 +670,51 @@ class GolfRoundState:
         self._bounce_in_progress         = True
         self._had_tree_bounce_this_hole  = True
 
+    def _execute_ai_partner_shot(self):
+        """Phase 12 — fire an automatic partner shot in foursomes mode.
+
+        Aims ~80 % of the remaining distance toward the pin with Gaussian
+        scatter scaled to tour level.  The shot bypasses player input by
+        directly setting the shot controller to EXECUTING state.
+        """
+        pin_wx, pin_wy = self._pin_world_pos()
+        dx = pin_wx - self.ball.x
+        dy = pin_wy - self.ball.y
+        dist = math.sqrt(dx * dx + dy * dy)
+
+        if dist < 1.0:
+            # Ball is already at the pin — hole it directly
+            self.ball.place(pin_wx, pin_wy)
+            return
+
+        # Aim fraction varies by distance: closer shots aim more precisely.
+        aim_frac   = min(0.90, 0.70 + (1 - min(dist, 600) / 600) * 0.20)
+        # Scatter grows with distance; capped at 3 tile widths.
+        tour_level = getattr(self.game.current_tournament, "tour_level", 3)
+        noise_base = self.tile_sz * (2.5 - (tour_level - 1) * 0.3)
+        sigma      = max(0.5 * self.tile_sz, noise_base * (dist / 500))
+
+        target_x = self.ball.x + dx * aim_frac + random.gauss(0, sigma)
+        target_y = self.ball.y + dy * aim_frac + random.gauss(0, sigma)
+        world_w, world_h = self.renderer.world_size()
+        target_x = clamp(target_x, 0, world_w - 1)
+        target_y = clamp(target_y, 0, world_h - 1)
+
+        self._last_safe_x = self.ball.x
+        self._last_safe_y = self.ball.y
+        self.strokes      += 1
+
+        # Put the shot controller into EXECUTING so _on_ball_landed fires.
+        self.shot_ctrl.state = ShotState.EXECUTING
+        self._ai_shot_in_progress = True
+
+        is_putt = (self._ball_terrain() == Terrain.GREEN)
+        self.ball.hit(target_x, target_y, is_putt=is_putt)
+        self._show_message("Partner's shot", 1.2)
+
+        from src.utils.sound_manager import SoundManager
+        SoundManager.instance().play("swing")
+
     def _apply_wind(self, is_putt: bool, putt_yards: float = 0.0) -> tuple:
         """Return (wind_dx, wind_dy) pixel offset for this shot."""
         if self.wind_strength == 0:
@@ -687,6 +760,10 @@ class GolfRoundState:
 
     def _on_ball_landed(self):
         self.shot_ctrl.on_ball_landed()
+        # Phase 12 — restore player turn after AI partner shot completes
+        if self.alternate_shot_mode and self._ai_shot_in_progress:
+            self._ai_shot_in_progress = False
+            self._player_turn = True
         terrain = self._ball_terrain()
 
         # Terrain landing sound
@@ -884,6 +961,12 @@ class GolfRoundState:
             if self.game.player is not None:
                 self.game.player.temp_event_buffs.clear()
                 self.game.player.club_fitting_active = None  # Phase 11: fitting is per-round
+            # Phase 12 — foursomes complete → team event result screen
+            if self.alternate_shot_mode:
+                from src.states.team_event_result import TeamEventResultState
+                self.game.change_state(
+                    TeamEventResultState(self.game, self.course, updated_scores))
+                return
             # All 18 holes done — show final scorecard
             self.game.change_state(RoundSummaryState(self.game, self.course, updated_scores))
         else:
@@ -941,6 +1024,18 @@ class GolfRoundState:
                       wind_angle=self.wind_angle, wind_strength=self.wind_strength,
                       ball_id=getattr(self.game.player, "ball_type", None),
                       conditions=self._conditions)
+
+        # Phase 12 — foursomes: show whose turn it is (top-left of viewport)
+        if self.alternate_shot_mode:
+            _ts = self.game.current_tournament
+            _partner = getattr(_ts, "player_partner", "Partner") if _ts else "Partner"
+            _turn_txt = "Your shot" if self._player_turn else f"{_partner}'s shot"
+            _turn_col = (100, 220, 100) if self._player_turn else (220, 160, 60)
+            _ts_surf = self.font_med.render(f"[Foursomes] {_turn_txt}", True, _turn_col)
+            _ts_bg = pygame.Surface((_ts_surf.get_width() + 16, 28), pygame.SRCALPHA)
+            _ts_bg.fill((0, 0, 0, 140))
+            surface.blit(_ts_bg, (6, 6))
+            surface.blit(_ts_surf, (14, 9))
 
         # Match play status overlay (bottom-left of viewport)
         _t = self.game.current_tournament

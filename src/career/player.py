@@ -176,6 +176,10 @@ class Player:
         self.prototype_uses_goal: int = 5
         self.club_wear: dict[str, float] = {}          # club name → accuracy loss (0–0.10)
 
+        # Phase 12 — international team event
+        self.team_event_seasons: list[int] = []   # career seasons where team event was held
+        self.team_event_wins: int = 0
+
     @property
     def clubs(self):
         return get_club_bag(self.club_set_name)
@@ -605,6 +609,9 @@ class Player:
             "prototype_club":           self.prototype_club,
             "prototype_uses_goal":      self.prototype_uses_goal,
             "club_wear":                dict(self.club_wear),
+            # Phase 12
+            "team_event_seasons":       list(self.team_event_seasons),
+            "team_event_wins":          self.team_event_wins,
         }
 
     @classmethod
@@ -694,4 +701,7 @@ class Player:
         p.prototype_club      = data.get("prototype_club", None)
         p.prototype_uses_goal = data.get("prototype_uses_goal", 5)
         p.club_wear           = data.get("club_wear", {})
+        # Phase 12
+        p.team_event_seasons  = data.get("team_event_seasons", [])
+        p.team_event_wins     = data.get("team_event_wins", 0)
         return p

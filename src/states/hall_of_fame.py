@@ -252,7 +252,14 @@ class HallOfFameState:
         arc_s = self.font_small.render(
             f"Season Arcs: {arc_count} completed", True,
             C_GOLD2 if arc_count else C_GRAY)
-        surface.blit(arc_s, (lx + 12, ry))
+        surface.blit(arc_s, (lx + 12, ry)); ry += 16
+
+        # Phase 12 — team event wins
+        te_wins = getattr(p, "team_event_wins", 0)
+        te_s = self.font_small.render(
+            f"Team Event Wins: {te_wins}", True,
+            C_GOLD2 if te_wins else C_GRAY)
+        surface.blit(te_s, (lx + 12, ry))
 
         # ── Bottom-right: Achievements ────────────────────────────────────────
         from src.career.player import ACHIEVEMENTS

@@ -482,6 +482,16 @@ class CareerHubState:
             if cds[k] > 0:
                 cds[k] -= 1
 
+        # ── Phase 12 — International Team Event (every 4 career seasons) ────────
+        _cs = getattr(p, "career_season", 1)
+        _te_seasons = getattr(p, "team_event_seasons", [])
+        if (_cs >= 4 and _cs % 4 == 0
+                and _cs not in _te_seasons
+                and p.events_this_season == 0):
+            from src.states.team_event_hub import TeamEventHubState
+            self.game.change_state(TeamEventHubState(self.game))
+            return
+
         # ── Q-School Qualifier ────────────────────────────────────────────────
         if p.qschool_pending:
             courses = get_courses_for_tour(get_tour_id(5))
