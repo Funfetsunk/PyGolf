@@ -187,7 +187,10 @@ class Ball:
         # "Rolling over the hole" — ball nearly at ground level passes over hole.
         # Gate on arc height so airborne balls above the hole aren't captured.
         arc_height = ARC_HEIGHT * 4 * t * (1.0 - t)
-        if arc_height <= BALL_RADIUS and dist_to_pin <= HOLE_ROLL_RADIUS:
+        vx = self._target_x - self._start_x
+        vy = self._target_y - self._start_y
+        moving_toward_pin = vx * (px - self.x) + vy * (py - self.y) > 0
+        if arc_height <= BALL_RADIUS and dist_to_pin <= HOLE_ROLL_RADIUS and moving_toward_pin:
             self.x = px
             self.y = py
             self.state       = BallState.SINKING

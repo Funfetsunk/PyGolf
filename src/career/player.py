@@ -410,13 +410,16 @@ class Player:
         """Update head-to-head record against the current rival."""
         if not self.rival_name:
             return
-        player_entry = next((e for e in leaderboard if e.get("is_player")), None)
-        rival_entry  = next((e for e in leaderboard
-                             if e.get("name") == self.rival_name), None)
-        if player_entry is None or rival_entry is None:
+        p_pos = r_pos = None
+        for i, e in enumerate(leaderboard):
+            if e.get("is_player"):
+                p_pos = i + 1
+            elif e.get("name") == self.rival_name:
+                r_pos = i + 1
+            if p_pos is not None and r_pos is not None:
+                break
+        if p_pos is None or r_pos is None:
             return
-        p_pos = leaderboard.index(player_entry) + 1
-        r_pos = leaderboard.index(rival_entry)  + 1
         if p_pos < r_pos:
             self.rival_head_to_head["wins"]   = self.rival_head_to_head.get("wins",   0) + 1
         elif p_pos > r_pos:

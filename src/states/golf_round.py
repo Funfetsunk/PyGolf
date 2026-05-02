@@ -139,7 +139,13 @@ class GolfRoundState:
             # Fog: reduce mini-map visibility
             self._fog = (self._conditions["weather"] == "fog")
         else:
-            self._conditions = None
+            self._conditions = {
+                "pin":         "standard",
+                "green_speed": "normal",
+                "firmness":    "normal",
+                "weather":     "clear",
+                "format":      "stroke",
+            }
             self._fog = False
 
         # ── Wind — randomised once per hole ──────────────────────────────────
