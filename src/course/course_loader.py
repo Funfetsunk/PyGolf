@@ -17,7 +17,6 @@ import pygame
 from src.course.course import Course
 from src.course.hole   import Hole
 
-from src.constants import SOURCE_TILE as _SOURCE_TILE   # noqa: F401
 
 
 class CourseValidationError(ValueError):

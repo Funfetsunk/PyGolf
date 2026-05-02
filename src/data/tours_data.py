@@ -99,8 +99,3 @@ def _load_json_courses(tour_id: str) -> list[Course]:
         except Exception as exc:
             print(f"[tours_data] Failed to load {path}: {exc}")
     return courses
-
-
-def _load_legacy_courses() -> list[Course]:
-    from src.data.courses_data import make_greenfields_course
-    return [make_greenfields_course()]

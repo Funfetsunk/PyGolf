@@ -209,20 +209,6 @@ def _synth_hole_in_one() -> list:
     )
 
 
-def _synth_cheer(rng: random.Random) -> list:
-    n = int(SAMPLE_RATE * 0.55)
-    result = []
-    for i in range(n):
-        t = i / n
-        # Crescendo then decay
-        env = math.exp(-((t - 0.35) ** 2) / 0.04) * 0.75
-        noise = rng.uniform(-1, 1)
-        # Add some formant-like colour
-        mod = 0.4 * math.sin(2 * math.pi * 180 * t) + 0.3 * math.sin(2 * math.pi * 320 * t)
-        result.append((noise * 0.6 + mod * 0.4) * env)
-    return result
-
-
 def _synth_bird_tweet(rng: random.Random) -> list:
     """A single short bird tweet — 0.5 s, two or three chirp syllables."""
     n   = int(SAMPLE_RATE * 0.5)
@@ -249,21 +235,6 @@ def _synth_bird_tweet(rng: random.Random) -> list:
     return out
 
 
-def _synth_crowd_ambient(rng: random.Random) -> list:
-    """2-second looping crowd murmur."""
-    n   = int(SAMPLE_RATE * 2.0)
-    out = []
-    for i in range(n):
-        t   = i / SAMPLE_RATE
-        # Low formant chatter
-        v   = (rng.uniform(-1, 1) * 0.18
-               + math.sin(2 * math.pi * 160 * t) * 0.06
-               + math.sin(2 * math.pi * 280 * t) * 0.05
-               + math.sin(2 * math.pi * 420 * t) * 0.04)
-        out.append(v)
-    return out
-
-
 # ── SoundManager ─────────────────────────────────────────────────────────────
 
 class SoundManager:
@@ -287,10 +258,6 @@ class SoundManager:
         self._bird_timer = 0.0        # counts down to next tweet
         self._bird_rng   = random.Random()
 
-        # Crowd murmur scheduling
-        self._crowd_mode  = False
-        self._crowd_timer = 0.0
-        self._crowd_rng   = random.Random()
 
         # Volume settings
         self.master_vol  = 1.0
@@ -317,9 +284,7 @@ class SoundManager:
             "birdie":        lambda: _buf(_synth_birdie()),
             "eagle":         lambda: _buf(_synth_eagle()),
             "hole_in_one":   lambda: _buf(_synth_hole_in_one()),
-            "crowd_cheer":   lambda: _buf(_synth_cheer(rng)),
             "bird_tweet":    lambda: _buf(_synth_bird_tweet(rng)),
-            "ambient_crowd": lambda: _buf(_synth_crowd_ambient(rng)),
         }
         for sid, recipe in _RECIPES.items():
             path = os.path.join(_ASSETS_DIR, f"{sid}.ogg")
@@ -348,11 +313,6 @@ class SoundManager:
         if s:
             s.play()
 
-    def play_crowd_cheer(self) -> None:
-        """Play a crowd cheer only when crowd ambient is active for this course."""
-        if self._crowd_mode:
-            self.play("crowd_cheer")
-
     def play_ambient(self, sid: str) -> None:
         if not self._ready:
             return
@@ -360,17 +320,13 @@ class SoundManager:
         if sid == "ambient_birds":
             self._bird_mode  = True
             self._bird_timer = self._bird_rng.uniform(4.0, 10.0)
-        elif sid == "ambient_crowd":
-            self._crowd_mode  = True
-            self._crowd_timer = self._crowd_rng.uniform(30.0, 90.0)
-        else:
+        elif sid != "ambient_crowd":
             s = self._sounds.get(sid)
             if s:
                 self._ambient_channel = s.play(loops=-1)
 
     def stop_ambient(self) -> None:
         self._bird_mode  = False
-        self._crowd_mode = False
         if self._ambient_channel is not None:
             self._ambient_channel.stop()
             self._ambient_channel = None
@@ -387,14 +343,6 @@ class SoundManager:
                     s.set_volume(self.master_vol * self.ambient_vol)
                     s.play()
                 self._bird_timer = self._bird_rng.uniform(8.0, 25.0)
-        if self._crowd_mode:
-            self._crowd_timer -= dt
-            if self._crowd_timer <= 0.0:
-                s = self._sounds.get("ambient_crowd")
-                if s:
-                    s.set_volume(self.master_vol * self.ambient_vol)
-                    s.play()
-                self._crowd_timer = self._crowd_rng.uniform(30.0, 90.0)
 
     # ── Volume ────────────────────────────────────────────────────────────────
 
@@ -415,12 +363,8 @@ class SoundManager:
 
     def _apply_volumes(self) -> None:
         """Bake master * category volume into each Sound object."""
-        ambient_ids = {"ambient_birds"}
-        for sid, s in self._sounds.items():
-            if sid in ambient_ids:
-                s.set_volume(self.master_vol * self.ambient_vol)
-            else:
-                s.set_volume(self.master_vol * self.sfx_vol)
+        for s in self._sounds.values():
+            s.set_volume(self.master_vol * self.sfx_vol)
 
     # ── Persistence ───────────────────────────────────────────────────────────
 

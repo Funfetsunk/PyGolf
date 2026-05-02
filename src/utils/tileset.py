@@ -2,10 +2,10 @@
 TilesetManager — loads tileset PNGs from assets/tilemaps/ and extracts
 individual tiles for use in the course renderer.
 
-Terrain tilesets (Hills, Tilled_Dirt, Water) use 32×32 source tiles and are
-always opaque.  Detail tilesets (RGBA PNGs with transparent backgrounds) are
-tracked separately; when loaded they are kept as convert_alpha() surfaces so
-the alpha channel is preserved for compositing.
+Terrain tilesets (Hills, Tilled_Dirt, Water) use SOURCE_TILE×SOURCE_TILE source
+tiles and are always opaque.  Detail tilesets (RGBA PNGs with transparent
+backgrounds) are tracked separately; when loaded they are kept as
+convert_alpha() surfaces so the alpha channel is preserved for compositing.
 
 Usage
 ─────
@@ -18,9 +18,7 @@ Usage
 import os
 import pygame
 from src.golf.terrain import Terrain
-
-# Source tile size in the terrain PNG sheets (Hills / Tilled_Dirt / Water)
-SOURCE_TILE = 32
+from src.constants import SOURCE_TILE
 
 # Map: terrain → (sheet_filename_stem, col, row, brightness_delta)
 _TILE_SPEC = {

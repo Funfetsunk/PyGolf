@@ -697,6 +697,12 @@ class GolfRoundState:
             self.strokes += 1
             self._show_message("Water hazard! +1 penalty stroke", 2.8)
             drop_x, drop_y = self._water_drop_pos()
+            for _r in range(1, 6):
+                if self.hole.get_terrain_at_pixel(drop_x, drop_y, self.tile_sz) != Terrain.WATER:
+                    break
+                _off = self.tile_sz * _r
+                drop_x = self._last_safe_x + random.uniform(-_off, _off)
+                drop_y = self._last_safe_y + random.uniform(-_off, _off)
             self.ball.place(drop_x, drop_y)
         elif terrain == Terrain.DEEP_ROUGH:
             self._show_message("Deep rough — tough lie", 1.8)
@@ -722,13 +728,10 @@ class GolfRoundState:
         diff = self.strokes - self.hole.par
         if self.strokes == 1:
             _snd.play("hole_in_one")
-            _snd.play_crowd_cheer()
         elif diff <= -2:
             _snd.play("eagle")
-            _snd.play_crowd_cheer()
         elif diff == -1:
             _snd.play("birdie")
-            _snd.play_crowd_cheer()
         else:
             _snd.play("ball_in_hole")
 
