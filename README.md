@@ -83,13 +83,23 @@ Every tournament generates a unique setup that affects how the course plays:
 
 ### Event Formats
 
-Three scoring formats appear across the tour schedule:
+Six scoring formats appear across the tour schedule:
 
 - **Stroke Play** — standard format; lowest total strokes wins
 - **Stableford** — points per hole (Albatross 5 · Eagle 4 · Birdie 3 · Par 2 · Bogey 1 · Double bogey+ 0); highest points wins; leaderboards show a **Pts** column
 - **Match Play Championship** — bracket event on Tour 2 and above; the player faces up to 4 opponents (Quarter-Final → Semi-Final → Final). Win a hole to go 1 UP; tie a hole to halve it. Match ends early when a player's lead exceeds the remaining holes. A live match status overlay tracks the standing hole by hole, and a dedicated Match Result screen follows each match
-- **Skills Competition** — long-drive format event on Tours 3–6; a `LongDriveState` session tracked by `SkillsSession`; precedes each major on Tour 6
 - **Skins** — each hole has a cash value; tie a hole and the skin carries over
+- **Pro-Am** — player is paired with 3 amateur AI partners; best ball counts each hole, giving a slight scoring advantage
+- **Skills Competition** — long-drive format event on Tours 3–6; precedes each major on Tour 6
+
+### International Team Event
+
+Every 4 career seasons a prestige **International Team Event** is held:
+
+- **Entry screen** — two teams of 6 (Home vs Away); the player picks an AI partner for the foursomes day
+- **Day 1 — Foursomes** — alternate-shot format; the AI partner takes every other shot (pre-simulated, shown via a "Partner's shot" toast); played as a normal round inside `GolfRoundState`
+- **Day 2 — Singles** — one-on-one match play against an opponent from the other team using the standard match play engine
+- Win the team event to add to your `team_event_wins` tally, shown as a badge in the Hall of Fame
 
 ### Career Progression
 
@@ -130,7 +140,12 @@ Six tour levels, each with its own season schedule, courses, prize fund, and AI 
 - **Prototype Driver** — obtainable via narrative event; use it 5× and finish top 10 to permanently unlock Accuracy +1
 
 **Staff** *(Continental Tour and above)*
-- Hire a Coach, Caddie, Sports Psychologist, or Fitness Trainer, each giving permanent stat bonuses
+- Hire a Coach, Sports Psychologist, or Fitness Trainer for permanent stat bonuses
+- Three **Caddie** variants — only one may be hired at a time; hiring a new one automatically releases the current:
+  - **Budget Caddie** *(blunt)* — Short Game +1, Putting +1 — cheapest option
+  - **Tour Caddie** *(tactical)* — Short Game +2, Putting +2 — mid-tier
+  - **Elite Caddie** *(optimistic)* — Short Game +3, Putting +3 — highest cost, largest bonus
+- Each caddie personality drives a **pre-shot tip** shown in the HUD when the ball is at rest: tactical tips react to wind, terrain, and pin position; optimistic caddies are always encouraging; blunt caddies only speak when something is critical
 
 **Sponsors** *(Continental Tour and above)*
 - Sign deals for a signing fee plus a season bonus if you hit a performance target (top-5 finishes, wins, etc.)
@@ -139,6 +154,11 @@ Six tour levels, each with its own season schedule, courses, prize fund, and AI 
 **Career Stats**
 - Full career history in a 3-column layout: season stats, career totals, and format/achievement progress
 - Achievements across scoring, format, adversity, and rival categories
+
+**Visual Progression**
+- The Career Hub changes its **colour theme** at each tour level — six distinct palettes from a green-toned Driving Range (Tour 1) through to the dark navy Grand Tour Clubhouse (Tour 6)
+- A **Location** label in the hub header names the venue for the current tour level
+- Each upcoming event in the schedule panel shows a **Prestige Badge** (Local → Regional → National → World-Class → Major Venue) colour-coded by tier
 
 ### Narrative Events
 

@@ -2,6 +2,66 @@
 
 All notable changes to Let's Golf! are documented here.
 
+## 2026-05-02 — Phase 13: Visual & Atmospheric Polish
+
+### Added
+
+#### Career Hub Visual Progression (Task 13.1)
+- The Career Hub now changes its colour palette based on the current tour level — six distinct themes from green-toned Driving Range (Tour 1) through to deep navy Grand Tour Clubhouse (Tour 6)
+- Theme is applied by updating `C_BG` and `C_PANEL` at the start of each `draw()` call, so all panels, tabs, and overlays pick it up automatically
+- A **Location:** label (e.g. "Training Centre", "Tour Facility") is rendered top-right of the hub header
+
+#### Course Prestige Badges (Task 13.2)
+- `Course` now carries a `prestige` metadata field: `"local"` / `"regional"` / `"national"` / `"world-class"` / `"major_venue"`
+- The event panel in the Career Hub renders a coloured prestige badge below the tour name label:
+  - Local — grey, Regional — green, National — blue, World-class — gold, Major Venue — purple
+- Badge is computed from the player's current tour level; major events always show **Major Venue**
+
+#### Caddie Personality & Tips (Task 13.3)
+- The caddie hire is expanded from one type to **three mutually exclusive variants**, each with a distinct personality and stat bonus tier:
+  - **Budget Caddie** *(blunt)* — Short Game +1, Putting +1 — $4,000 hire
+  - **Tour Caddie** *(tactical)* — Short Game +2, Putting +2 — $8,000 hire
+  - **Elite Caddie** *(optimistic)* — Short Game +3, Putting +3 — $15,000 hire
+- Hiring one caddie automatically fires any other already hired (only one caddie at a time)
+- A **caddie tip** line appears at the bottom of the HUD whenever the ball is at rest and the player has not yet started aiming; tip content depends on personality:
+  - *Optimistic* — a rotating set of encouraging lines keyed to the hole number
+  - *Tactical* — reactive tips based on wind strength, terrain, pin position, and green speed
+  - *Blunt* — only speaks when there is something critical to say (bunker, strong wind, tucked pin); otherwise silent
+- Staff tab now shows a 3-row × 2-column grid to accommodate the three caddie cards
+
+---
+
+## 2026-05-02 — Phase 12: International Team Event
+
+### Added
+
+#### Team Event (Task 12.1)
+- A prestige **International Team Event** triggers every 4 career seasons (tracked via `player.team_event_seasons`)
+- Entry screen (`TeamEventHubState`) displays two teams of 6 — Home vs Away — and lets the player choose an AI partner for foursomes
+- **Day 1 — Foursomes:** alternate-shot format built into `GolfRoundState` via `alternate_shot_mode` and `player_turn` flags; every other shot is taken by the AI partner (pre-simulated position with tour-level scatter); a "Partner's shot" toast confirms each AI turn
+- **Day 2 — Singles match play:** the player faces one opponent from the opposing team using the existing match play engine
+- Team result screen (`TeamEventResultState`) tallies points and records a win in `player.team_event_wins`; win badge surfaces in the Hall of Fame
+
+---
+
+## 2026-05-02 — Bug Fixes & Code Quality
+
+### Fixed
+- **Ball capture** now requires the ball to be moving towards the pin before it is holed, preventing false captures on a stationary ball near the cup
+- **Practice rounds** now apply weather condition modifiers correctly (they were being skipped for non-tournament rounds)
+- **Leaderboard hot-path** performance improved — avoids redundant re-sort on every draw call
+- **Water-drop safety** — added a post-drop guard to ensure the ball is never placed back inside a water tile after a penalty drop
+- **Tileset notification** — a console warning surfaces when a tileset PNG referenced by a JSON course is missing, replacing a silent fallback
+
+### Changed
+- Wind calculation extracted into a single `_compute_wind()` helper in `GolfRoundState` (was duplicated across `__init__` and `_advance`)
+- Shot physics constants moved to a config file loaded at startup; `GolfRoundState` reads from that rather than using inline magic numbers
+- `TilesetManager.SOURCE_TILE` corrected to 16 px to match the actual tile image size (was mismatched, causing offset rendering in the detail layer)
+- Detail-layer rendering made more efficient — avoids rebuilding the sprite dict on every frame for unchanged tiles
+- Circular dependency at the module root for `apply_tournament_result` removed; now imported lazily inside the function that needs it
+
+---
+
 ## 2026-04-28 — Bug Fixes (review follow-up)
 
 ### Fixed
