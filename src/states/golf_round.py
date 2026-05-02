@@ -1018,12 +1018,19 @@ class GolfRoundState:
             surface.blit(_fog_surf, (0, 0))
 
         terrain_name = TERRAIN_PROPS[self._ball_terrain()]['name']
+        # Show caddie tip when ball is at rest and player hasn't started aiming.
+        _caddie_tip = None
+        if (self.ball.state == BallState.AT_REST
+                and not self.hole_complete
+                and self.shot_ctrl.state == ShotState.IDLE):
+            _caddie_tip = self._caddie_tip()
         self.hud.draw(surface, self.hole, self.strokes,
                       self.current_club, self.shot_ctrl, terrain_name,
                       renderer=self.renderer, ball_world_pos=self.ball.pos,
                       wind_angle=self.wind_angle, wind_strength=self.wind_strength,
                       ball_id=getattr(self.game.player, "ball_type", None),
-                      conditions=self._conditions)
+                      conditions=self._conditions,
+                      caddie_tip=_caddie_tip)
 
         # Phase 12 — foursomes: show whose turn it is (top-left of viewport)
         if self.alternate_shot_mode:
@@ -1056,6 +1063,59 @@ class GolfRoundState:
 
         if self._paused:
             self._draw_pause_overlay(surface)
+
+    def _caddie_tip(self) -> str | None:
+        """Return a personality-driven caddie tip, or None if no caddie hired."""
+        player = self.game.player
+        if player is None:
+            return None
+        from src.career.staff import STAFF_TYPES, CADDIE_IDS
+        caddie_id = next(
+            (sid for sid in player.hired_staff if sid in CADDIE_IDS), None)
+        if caddie_id is None:
+            return None
+        personality = STAFF_TYPES[caddie_id].get("personality", "tactical")
+
+        from src.golf.terrain import Terrain
+        terrain  = self._ball_terrain()
+        wind     = self.wind_strength
+        pin_pos  = self._conditions.get("pin", "standard")
+
+        if personality == "optimistic":
+            tips = [
+                "Easy birdie here. You've got this.",
+                "Perfect conditions. Make it count.",
+                "Your best hole is this one.",
+                "Confidence wins. Trust your swing.",
+                "Great setup. Attack the pin.",
+            ]
+            return tips[self.hole_index % len(tips)]
+
+        elif personality == "tactical":
+            if terrain == Terrain.BUNKER:
+                return "Open the face, hit behind the ball. Aim for the middle."
+            if terrain == Terrain.GREEN:
+                spd = self._conditions.get("green_speed", "normal")
+                return f"Greens are {spd}. Read the break, control your speed."
+            if wind >= 4:
+                angle_deg = math.degrees(self.wind_angle) % 360
+                dirs = ["N", "NE", "E", "SE", "S", "SW", "W", "NW"]
+                dir_s = dirs[int((angle_deg + 22.5) / 45) % 8]
+                return f"Wind {wind} from {dir_s} — take one extra club."
+            if terrain == Terrain.ROUGH:
+                return "In the rough — focus on contact, not distance."
+            if pin_pos == "tucked":
+                return "Tucked pin. Aim for the fat of the green."
+            return "Good lie. Pick a target and commit."
+
+        else:  # blunt
+            if terrain == Terrain.BUNKER:
+                return "Bunker. Open face. Don't thin it."
+            if wind >= 4:
+                return f"Wind {wind}. Adjust."
+            if pin_pos == "tucked":
+                return "Flag's tucked. Don't miss short-side."
+            return None
 
     def _dismiss_tutorial(self):
         self._show_tutorial = False

@@ -6,9 +6,10 @@ Course — container for an 18-hole golf course.
 class Course:
     """An ordered collection of Hole objects with metadata."""
 
-    def __init__(self, name, holes):
-        self.name  = name
-        self.holes = holes          # list[Hole], length 1–18
+    def __init__(self, name, holes, prestige: str = "local"):
+        self.name     = name
+        self.holes    = holes          # list[Hole], length 1–18
+        self.prestige = prestige       # "local"|"regional"|"national"|"world-class"|"major_venue"
 
     # ── Basic info ────────────────────────────────────────────────────────────
 

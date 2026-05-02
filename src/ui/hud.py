@@ -99,7 +99,7 @@ class HUD:
 
     def draw(self, surface, hole, strokes, club, shot_ctrl, terrain_name,
              renderer=None, ball_world_pos=None, wind_angle=0.0, wind_strength=0,
-             ball_id=None, conditions=None):
+             ball_id=None, conditions=None, caddie_tip=None):
         """
         Draw the complete HUD panel.
 
@@ -271,6 +271,26 @@ class HUD:
                      "Release to shoot  •  Scroll = club"):
             self._text(surface, line, self.font_small, (110, 115, 108), x, y)
             y += 20
+
+        # ── Caddie tip (Task 13.3) ────────────────────────────────────────────
+        if caddie_tip:
+            self._divider(surface, y + 2)
+            self._text(surface, "Caddie:", self.font_small, (160, 130, 80), x, y + 6)
+            # Word-wrap if tip is long (max ~26 chars per line at this font size)
+            words = caddie_tip.split()
+            line_buf, tip_y = [], y + 22
+            for word in words:
+                test = " ".join(line_buf + [word])
+                if self.font_small.size(test)[0] <= rw:
+                    line_buf.append(word)
+                else:
+                    self._text(surface, " ".join(line_buf),
+                               self.font_small, (200, 175, 120), x, tip_y)
+                    tip_y += 18
+                    line_buf = [word]
+            if line_buf:
+                self._text(surface, " ".join(line_buf),
+                           self.font_small, (200, 175, 120), x, tip_y)
 
     # ── Event handling ────────────────────────────────────────────────────────
 

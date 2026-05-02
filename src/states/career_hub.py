@@ -17,7 +17,7 @@ from src.golf.ball_types  import BALL_TYPES, BALL_ORDER, effect_summary as ball_
 from src.career.player    import STAT_KEYS, BASE_STAT, MAX_STAT, ACHIEVEMENTS
 from src.career.tournament import (TOUR_DISPLAY_NAMES, EVENTS_PER_SEASON,
                                    TOUR_CHAMPIONSHIP_QUALIFIERS)
-from src.career.staff      import STAFF_TYPES, STAFF_ORDER
+from src.career.staff      import STAFF_TYPES, STAFF_ORDER, CADDIE_IDS
 from src.career.sponsorship import get_offer_group, is_target_met, progress_label
 from src.constants          import SCREEN_W, SCREEN_H
 from src.ui                 import fonts
@@ -73,6 +73,27 @@ C_TAB_HOV    = ( 32,  56,  32)
 C_ACH_DONE   = ( 30,  70,  30)
 C_ACH_LOCK   = ( 30,  36,  30)
 C_SPONSOR_ACT= ( 28,  50,  78)
+
+# ── Tour-level hub themes (Task 13.1) ─────────────────────────────────────────
+HUB_THEMES = {
+    1: {"C_BG": ( 30,  50,  30), "C_PANEL": ( 45,  70,  45), "label": "Driving Range"},
+    2: {"C_BG": ( 30,  40,  55), "C_PANEL": ( 45,  60,  80), "label": "Club Facility"},
+    3: {"C_BG": ( 50,  40,  30), "C_PANEL": ( 70,  60,  45), "label": "Training Centre"},
+    4: {"C_BG": ( 30,  30,  55), "C_PANEL": ( 50,  50,  80), "label": "Performance Lab"},
+    5: {"C_BG": ( 55,  45,  25), "C_PANEL": ( 80,  65,  40), "label": "Tour Facility"},
+    6: {"C_BG": ( 20,  20,  40), "C_PANEL": ( 40,  35,  65), "label": "Grand Tour Clubhouse"},
+}
+
+# ── Course prestige (Task 13.2) ────────────────────────────────────────────────
+_PRESTIGE_FOR_TOUR = {1: "local", 2: "regional", 3: "national",
+                      4: "national", 5: "world-class", 6: "world-class"}
+_PRESTIGE_COLOURS  = {
+    "local":       (130, 130, 130),
+    "regional":    ( 55, 160,  55),
+    "national":    ( 60, 120, 200),
+    "world-class": (210, 170,  30),
+    "major_venue": (160,  60, 220),
+}
 
 STAT_LABELS = {
     "power":      "Power",
@@ -221,7 +242,7 @@ class CareerHubState:
         self._event_panel = pygame.Rect(cx, ty, cw, CONTENT_H)
 
     def _build_tab1_rects(self):
-        """2×2 grid of staff hire cards."""
+        """2-column grid of staff hire cards (3 rows with caddie variants)."""
         card_w, card_h = 590, 145
         gx, gy = 20, 16
         x0 = CONTENT_X
@@ -398,6 +419,11 @@ class CareerHubState:
         if p.money < info["hire_cost"]:
             self._flash(f"Need ${info['hire_cost']:,} to hire {info['label']}")
             return
+        # Caddie exclusivity — fire any other caddie variant before hiring.
+        if sid in CADDIE_IDS:
+            for other in CADDIE_IDS:
+                if other != sid and other in p.hired_staff:
+                    p.fire_staff(other)
         if p.hire_staff(sid):
             self._flash(f"Hired {info['label']}! (${info['hire_cost']:,})")
             self._pop_new_achievements()
@@ -688,6 +714,12 @@ class CareerHubState:
     # ── Draw ──────────────────────────────────────────────────────────────────
 
     def draw(self, surface):
+        # Apply tour-level theme — updates C_BG / C_PANEL for all sub-methods.
+        global C_BG, C_PANEL
+        _theme = HUB_THEMES.get(self.player.tour_level, HUB_THEMES[1])
+        C_BG   = _theme["C_BG"]
+        C_PANEL = _theme["C_PANEL"]
+
         surface.fill(C_BG)
         p  = self.player
         cx = SCREEN_W // 2
@@ -714,6 +746,11 @@ class CareerHubState:
             f"Event {event_n}/{total_evts}  •  ${p.money:,}",
             True, (90, 160, 80))
         surface.blit(sub, (cx - sub.get_width() // 2, 44))
+
+        # Location label (Task 13.1)
+        loc_s = self.font_small.render(
+            f"Location: {_theme['label']}", True, C_GRAY)
+        surface.blit(loc_s, (SCREEN_W - loc_s.get_width() - 12, 14))
 
         # ── Tab bar ───────────────────────────────────────────────────────────
         recommended_tab = self._recommended_tab()
@@ -979,7 +1016,18 @@ class CareerHubState:
                 surface.blit(pa_sub, (cx - pa_sub.get_width() // 2, ty)); ty += 20
 
         tn = self.font_med.render(tour_name, True, (100, 175, 80))
-        surface.blit(tn, (cx - tn.get_width() // 2, ty)); ty += 36
+        surface.blit(tn, (cx - tn.get_width() // 2, ty)); ty += 28
+
+        # Prestige badge (Task 13.2)
+        prestige = "major_venue" if _major else _PRESTIGE_FOR_TOUR.get(p.tour_level, "local")
+        p_col    = _PRESTIGE_COLOURS.get(prestige, C_GRAY)
+        p_label  = prestige.replace("-", " ").title()
+        badge_s  = self.font_small.render(f"[ {p_label} ]", True, p_col)
+        badge_r  = badge_s.get_rect(centerx=cx, y=ty).inflate(12, 4)
+        dim_col  = tuple(max(0, c // 3) for c in p_col)
+        pygame.draw.rect(surface, dim_col, badge_r, border_radius=3)
+        pygame.draw.rect(surface, p_col,   badge_r, 1, border_radius=3)
+        surface.blit(badge_s, badge_s.get_rect(centerx=cx, y=ty)); ty += 24
 
         # Majors won tracker (Grand Tour)
         if p.tour_level == 6:
