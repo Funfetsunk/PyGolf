@@ -15,7 +15,9 @@ DRAW curves the ball slightly to the left (relative to shot direction).
 FADE curves it right. Straight goes true.
 """
 
+import json
 import math
+import os
 import random
 from collections import namedtuple
 from enum import Enum, auto
@@ -35,14 +37,24 @@ MAX_DRAG_PIXELS = 130
 # the same whether the device is a 4" phone or a 27" monitor.
 AIM_CLICK_RADIUS = 80
 
+def _load_shot_config() -> dict:
+    path = os.path.join(os.path.dirname(__file__), '..', '..', 'data', 'game_config.json')
+    try:
+        with open(path) as f:
+            return json.load(f).get('shot_physics', {})
+    except (FileNotFoundError, json.JSONDecodeError):
+        return {}
+
+_shot_cfg = _load_shot_config()
+
 # How much lateral curve is applied as a fraction of total shot distance.
-SHAPE_CURVE_FRACTION = 0.15
+SHAPE_CURVE_FRACTION: float = _shot_cfg.get('shape_curve_fraction', 0.15)
 
 # Scatter multipliers (fraction of shot distance).
 # Lateral: perpendicular miss — bell-curve via gauss.
 # Distance: over/under-shoot along the shot direction.
-SCATTER_LATERAL   = 0.40
-SCATTER_DISTANCE  = 0.12
+SCATTER_LATERAL:  float = _shot_cfg.get('scatter_lateral',  0.40)
+SCATTER_DISTANCE: float = _shot_cfg.get('scatter_distance', 0.12)
 
 
 class ShotShape(Enum):

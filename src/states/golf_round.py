@@ -395,22 +395,13 @@ class GolfRoundState:
         is_putt = (self.current_club.name == "Putter")
 
         # Wind drift — putts >15 yards get 20% of full drift; shorter putts unaffected
-        if self.wind_strength == 0:
-            wind_x = wind_y = 0.0
-        elif is_putt:
+        if is_putt:
             putt_yards = (math.sqrt((result.aim_x - self.ball.x) ** 2 +
                                     (result.aim_y - self.ball.y) ** 2)
                           / self.tile_sz * 10)
-            if putt_yards > 15:
-                wind_scale = self.tile_sz * 0.55 * 0.20
-                wind_x = math.cos(self.wind_angle) * self.wind_strength * wind_scale
-                wind_y = math.sin(self.wind_angle) * self.wind_strength * wind_scale
-            else:
-                wind_x = wind_y = 0.0
         else:
-            wind_scale = self.tile_sz * 0.55
-            wind_x = math.cos(self.wind_angle) * self.wind_strength * wind_scale
-            wind_y = math.sin(self.wind_angle) * self.wind_strength * wind_scale
+            putt_yards = 0.0
+        wind_x, wind_y = self._apply_wind(is_putt, putt_yards)
 
         aim_x = clamp(result.aim_x, 0, world_w - 1)
         aim_y = clamp(result.aim_y, 0, world_h - 1)
@@ -650,6 +641,21 @@ class GolfRoundState:
         self.ball.hit(bx, by, is_putt=False)
         self._bounce_in_progress         = True
         self._had_tree_bounce_this_hole  = True
+
+    def _apply_wind(self, is_putt: bool, putt_yards: float = 0.0) -> tuple:
+        """Return (wind_dx, wind_dy) pixel offset for this shot."""
+        if self.wind_strength == 0:
+            return 0.0, 0.0
+        if is_putt:
+            if putt_yards > 15:
+                wind_scale = self.tile_sz * 0.55 * 0.20
+            else:
+                return 0.0, 0.0
+        else:
+            wind_scale = self.tile_sz * 0.55
+        wx = math.cos(self.wind_angle) * self.wind_strength * wind_scale
+        wy = math.sin(self.wind_angle) * self.wind_strength * wind_scale
+        return wx, wy
 
     def _water_drop_pos(self):
         """

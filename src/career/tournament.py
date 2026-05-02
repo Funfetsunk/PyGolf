@@ -155,6 +155,8 @@ class Tournament:
         self.major_id     = major_id
         self.is_qschool   = is_qschool
         # Match play uses one round per bracket match; determined before simulation.
+        # Floor of 2 ensures at least a semi/final; cap of 4 avoids unbounded sims
+        # for large fields (64-player field → 6 rounds but we only model 4).
         if format == FORMAT_MATCH_PLAY and opponents:
             self.total_rounds = min(4, max(2, len(opponents)))
         else:
@@ -252,7 +254,8 @@ class Tournament:
         self.skins_carried: int          = 0
         self.skins_won: list[bool]       = [False] * len(self.hole_pars)
         self.skins_prize_per_hole: list[int] = [0] * len(self.hole_pars)
-        # Amateur partner best-ball: mostly bogeys, occasional birdie
+        # Amateur partner best-ball: skews bogey-biased (range par-1 to par+3)
+        # so the player's skill gap vs. a pro field shows through in best-ball.
         self.partner_scores: list[int]   = (
             [max(1, p + rng.randint(-1, 3)) for p in self.hole_pars]
             if self.format == FORMAT_PROAM else []
@@ -374,6 +377,7 @@ class Tournament:
                 and hole_index < len(self._opp_holes[opp.name][rnd]))
         ]
         current_value = self.skin_value * (1 + self.skins_carried)
+        # Player must beat ALL opponents outright; any tie carries the skin forward.
         player_wins   = bool(opp_scores) and all(player_score < s for s in opp_scores)
 
         if hole_index < len(self.skins_won):

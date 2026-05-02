@@ -430,12 +430,6 @@ class Player:
     def gain_reputation(self, amount: int) -> None:
         self.reputation = min(100, self.reputation + amount)
 
-    def apply_tournament_result(self, tournament) -> dict:
-        # Logic lives in CareerService so the rankings/staff imports it
-        # needs can be at module scope without introducing a circular import.
-        from src.career.service import process_tournament_result
-        return process_tournament_result(self, tournament)
-
     def reset_season(self) -> None:
         self._pay_out_sponsor()
         self.season                  += 1

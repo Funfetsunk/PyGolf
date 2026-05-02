@@ -237,7 +237,7 @@ class CareerService:
         - Autosaves. The tournament is dropped from the save when complete so
           the next load starts cleanly at the Career Hub.
 
-        Returns the dict produced by `Player.apply_tournament_result` when
+        Returns the dict produced by `process_tournament_result` when
         the tournament just completed, or None otherwise.
         """
         tournament = self.game.current_tournament
@@ -247,7 +247,7 @@ class CareerService:
         if tournament is not None:
             tournament.record_player_round(scores)
             if tournament.is_complete() and player is not None:
-                result = player.apply_tournament_result(tournament)
+                result = process_tournament_result(player, tournament)
 
         if player is not None:
             try:

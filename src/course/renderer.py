@@ -109,9 +109,11 @@ def _diagonal_hatch(surf, ts, color, step):
 
     step=4 gives a light hatch (rough), step=2 a dense hatch (deep rough).
     """
+    surf.set_clip((0, 0, ts, ts))
     for offset in range(-ts, ts, step):
         pygame.draw.line(surf, color,
                          (0, offset), (ts, offset + ts), 1)
+    surf.set_clip(None)
 
 
 def _bunker(surf, ts, rng):
@@ -242,16 +244,17 @@ class CourseRenderer:
             detail_surf = pygame.Surface((width, height), pygame.SRCALPHA)
             detail_surf.fill((0, 0, 0, 0))
 
-            for row in range(self.hole.rows):
-                for col in range(self.hole.cols):
-                    if row >= len(self.hole.detail_layer):
-                        continue
-                    cell = self.hole.detail_layer[row][col]
-                    if cell is None:
-                        continue
-                    tile = self._get_visual_tile(cell, ts, alpha=True)
-                    if tile is not None:
-                        detail_surf.blit(tile, (col * ts, row * ts))
+            max_row = min(self.hole.rows, len(self.hole.detail_layer))
+            detail_cells = [
+                (row, col, self.hole.detail_layer[row][col])
+                for row in range(max_row)
+                for col in range(self.hole.cols)
+                if self.hole.detail_layer[row][col] is not None
+            ]
+            for row, col, cell in detail_cells:
+                tile = self._get_visual_tile(cell, ts, alpha=True)
+                if tile is not None:
+                    detail_surf.blit(tile, (col * ts, row * ts))
 
             ground_surf.blit(detail_surf, (0, 0))
 

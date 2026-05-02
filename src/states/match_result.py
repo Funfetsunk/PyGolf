@@ -18,6 +18,7 @@ import pygame
 
 from src.ui    import fonts
 from src.constants import SCREEN_W, SCREEN_H
+from src.career.service import process_tournament_result
 
 C_BG        = ( 10,  14,  20)
 C_PANEL     = ( 16,  22,  34)
@@ -94,7 +95,7 @@ class MatchResultState:
         p  = self.game.player
         if p is None:
             return {}
-        result = p.apply_tournament_result(t)
+        result = process_tournament_result(p, t)
         try:
             from src.utils.save_system import save_game
             save_game(p, None)   # tournament complete — no need to persist it
