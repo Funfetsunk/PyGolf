@@ -430,6 +430,36 @@ class GolfRoundState:
             target_x = clamp(aim_x + result.shape_x + wind_x, 0, world_w - 1)
             target_y = clamp(aim_y + result.shape_y + wind_y, 0, world_h - 1)
 
+        # Clamp target to a forward cone so the ball never lands behind the
+        # player.  Strong wind on short shots is the usual culprit.  75° gives
+        # plenty of room for draw/fade shaping and rough scatter while keeping
+        # the ball in the forward hemisphere.
+        _MAX_SCATTER = math.radians(75)
+        _adx = aim_x - self.ball.x
+        _ady = aim_y - self.ball.y
+        _aim_dist = math.sqrt(_adx * _adx + _ady * _ady)
+        if _aim_dist > 0:
+            _tdx = target_x - self.ball.x
+            _tdy = target_y - self.ball.y
+            _t_dist = math.sqrt(_tdx * _tdx + _tdy * _tdy)
+            if _t_dist > 0:
+                _ax, _ay = _adx / _aim_dist, _ady / _aim_dist
+                _tx, _ty = _tdx / _t_dist, _tdy / _t_dist
+                _dot = clamp(_tx * _ax + _ty * _ay, -1.0, 1.0)
+                if _dot < math.cos(_MAX_SCATTER):
+                    _cross = _tx * _ay - _ty * _ax
+                    _sign = 1.0 if _cross >= 0 else -1.0
+                    _a = _MAX_SCATTER * _sign
+                    _cos_a, _sin_a = math.cos(_a), math.sin(_a)
+                    _nx = _ax * _cos_a - _ay * _sin_a
+                    _ny = _ax * _sin_a + _ay * _cos_a
+                    target_x = clamp(self.ball.x + _nx * _t_dist, 0, world_w - 1)
+                    target_y = clamp(self.ball.y + _ny * _t_dist, 0, world_h - 1)
+                    # Keep wind consistent with clamped landing position so the
+                    # flight animation and the snap-to-target agree.
+                    wind_x = target_x - aim_x - result.shape_x
+                    wind_y = target_y - aim_y - result.shape_y
+
         self._last_safe_x = self.ball.x
         self._last_safe_y = self.ball.y
 

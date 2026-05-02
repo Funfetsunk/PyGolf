@@ -62,8 +62,8 @@ class MainMenuState:
         self.font_title  = fonts.heading(72)
         self.font_sub    = fonts.body(22)
         self.font_btn    = fonts.body(24, bold=True)
-        self.font_medium = fonts.body(18)
-        self.font_small  = fonts.body(14)
+        self.font_medium = fonts.body(20)
+        self.font_small  = fonts.body(16)
 
         self._bg = MenuBackground(SCREEN_W, SCREEN_H)
 

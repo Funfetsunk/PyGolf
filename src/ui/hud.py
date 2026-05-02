@@ -45,9 +45,9 @@ class HUD:
         self.panel_x       = screen_width - PANEL_WIDTH
         self.panel_rect    = pygame.Rect(self.panel_x, 0, PANEL_WIDTH, screen_height)
 
-        self.font_large  = fonts.heading(28)
-        self.font_medium = fonts.body(19)
-        self.font_small  = fonts.body(15)
+        self.font_large  = fonts.heading(32)
+        self.font_medium = fonts.body(22)
+        self.font_small  = fonts.body(18)
 
         self._build_buttons()
 
@@ -339,7 +339,7 @@ class HUD:
             return
         # C-curve glyph: ball starts at bottom-centre, bows left (DRAW) or
         # right (FADE) in the middle, returns to centre at the top.
-        bow = -6 if shape == ShotShape.DRAW else 6
+        bow = 6 if shape == ShotShape.DRAW else -6
         pts = [(cx,       top + 11),   # bottom centre
                (cx + bow, top + 6),    # mid — pulled left/right
                (cx,       top + 1)]    # top centre

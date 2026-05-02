@@ -36,9 +36,9 @@ class NarrativeEventState:
         self.event = event_dict
 
         self.font_title = fonts.heading(32)
-        self.font_body  = fonts.body(16)
-        self.font_btn   = fonts.body(15, bold=True)
-        self.font_small = fonts.body(13)
+        self.font_body  = fonts.body(18)
+        self.font_btn   = fonts.body(17, bold=True)
+        self.font_small = fonts.body(15)
 
         px = SCREEN_W // 2 - _PANEL_W // 2
         py = SCREEN_H // 2 - _PANEL_H // 2

@@ -56,9 +56,9 @@ class CharacterCreationState:
         self.game = game
 
         self.font_title  = fonts.heading(38)
-        self.font_hdr    = fonts.heading(16)
-        self.font_medium = fonts.body(18)
-        self.font_small  = fonts.body(14)
+        self.font_hdr    = fonts.heading(18)
+        self.font_medium = fonts.body(20)
+        self.font_small  = fonts.body(16)
         self.font_input  = fonts.body(22)
         self.font_large  = fonts.heading(26)
 
@@ -345,7 +345,7 @@ class CharacterCreationState:
                 pygame.draw.rect(surface, bg,        btn, border_radius=4)
                 pygame.draw.rect(surface, C_DIVIDER, btn, 1, border_radius=4)
                 sym = self.font_medium.render(
-                    "−" if btn == row["minus"] else "+", True, tc)
+                    "-" if btn == row["minus"] else "+", True, tc)
                 surface.blit(sym, sym.get_rect(center=btn.center))
 
     def _draw_bottom_buttons(self, surface):

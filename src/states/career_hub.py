@@ -130,9 +130,9 @@ class CareerHubState:
         self.player = game.player
 
         self.font_title = fonts.heading(30)
-        self.font_hdr   = fonts.body(15, bold=True)
-        self.font_med   = fonts.body(14)
-        self.font_small = fonts.body(12)
+        self.font_hdr   = fonts.body(17, bold=True)
+        self.font_med   = fonts.body(16)
+        self.font_small = fonts.body(14)
 
         self._tab  = 0
         self._hov  = None

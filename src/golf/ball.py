@@ -184,8 +184,10 @@ class Ball:
         px, py = pin_world_pos
         dist_to_pin = math.sqrt((self.x - px) ** 2 + (self.y - py) ** 2)
 
-        # "Rolling over the hole" — ball is decelerating in the final approach
-        if t > 0.75 and dist_to_pin <= HOLE_ROLL_RADIUS:
+        # "Rolling over the hole" — ball nearly at ground level passes over hole.
+        # Gate on arc height so airborne balls above the hole aren't captured.
+        arc_height = ARC_HEIGHT * 4 * t * (1.0 - t)
+        if arc_height <= BALL_RADIUS and dist_to_pin <= HOLE_ROLL_RADIUS:
             self.x = px
             self.y = py
             self.state       = BallState.SINKING
