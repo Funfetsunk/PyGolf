@@ -13,6 +13,7 @@ then fades back in.  Total transition time ≈ 0.45 s.
 """
 
 import pygame
+from collections import deque
 
 
 _FADE_SPEED = 560   # alpha units per second (255 / 0.45 s ≈ 567)
@@ -28,7 +29,7 @@ class Game:
         # Fade-transition state
         self._fade_alpha:   float           = 0.0
         self._fade_phase:   str | None      = None   # "out" | "in" | None
-        self._pending_state                 = None
+        self._pending_states: deque         = deque()
         self._fade_surface: pygame.Surface | None = None
 
         from src.states.main_menu import MainMenuState
@@ -49,12 +50,13 @@ class Game:
 
     def change_state(self, state, fade: bool = True):
         """Replace the current top state, optionally with a fade transition."""
-        if fade and self.state_stack and self._fade_phase is None:
-            self._pending_state = state
-            self._fade_phase    = "out"
-            self._fade_alpha    = 0.0
+        if fade and self.state_stack:
+            self._pending_states.append(state)
+            if self._fade_phase is None:
+                self._fade_phase = "out"
+                self._fade_alpha = 0.0
         else:
-            # Immediate swap (used internally when fade completes, or fade=False)
+            # Immediate swap (fade=False, or no state to transition from)
             if self.state_stack:
                 self.state_stack.pop()
             self.state_stack.append(state)
@@ -76,13 +78,16 @@ class Game:
                 # Swap the state at full black
                 if self.state_stack:
                     self.state_stack.pop()
-                self.state_stack.append(self._pending_state)
-                self._pending_state = None
-                self._fade_phase    = "in"
+                self.state_stack.append(self._pending_states.popleft())
+                self._fade_phase = "in"
         elif self._fade_phase == "in":
             self._fade_alpha = max(0.0, self._fade_alpha - _FADE_SPEED * dt)
             if self._fade_alpha <= 0.0:
-                self._fade_phase = None
+                if self._pending_states:
+                    self._fade_phase = "out"
+                    self._fade_alpha = 0.0
+                else:
+                    self._fade_phase = None
 
         if self.current_state:
             self.current_state.update(dt)

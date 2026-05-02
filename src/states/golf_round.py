@@ -287,7 +287,7 @@ class GolfRoundState:
 
         # Phase 11 — club wear reduces accuracy
         wear = getattr(player, "club_wear", {}).get(club.name, 0.0)
-        new_acc -= wear
+        new_acc = max(0.01, new_acc - wear)
 
         # Phase 11 — club fitting gives a temporary accuracy bonus for one event
         fitting = getattr(player, "club_fitting_active", None)
