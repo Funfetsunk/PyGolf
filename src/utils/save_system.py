@@ -18,9 +18,8 @@ import re
 import time
 
 from src.career.player import Player
-from src.utils import web
+from src.utils import paths, web
 
-SAVE_DIR    = "saves"
 SAVE_FORMAT = 8   # v8: Phase 11 club_fitting_active, prototype_club, club_wear
 
 # localStorage key prefix — namespaces our saves so we don't collide with
@@ -44,7 +43,7 @@ def _safe_filename(name: str) -> str:
 
 
 def save_path_for(player_name: str) -> str:
-    return os.path.join(SAVE_DIR, f"{_safe_filename(player_name)}.json")
+    return os.path.join(paths.saves_dir(), f"{_safe_filename(player_name)}.json")
 
 
 # ── Storage-agnostic primitives ──────────────────────────────────────────────
@@ -86,10 +85,10 @@ def _remove(path: str) -> None:
 def _list_save_paths() -> list[str]:
     if web.IS_WEB:
         return [k[len(_LS_PREFIX):] for k in web.ls_keys_with_prefix(_LS_PREFIX)]
-    os.makedirs(SAVE_DIR, exist_ok=True)
+    os.makedirs(paths.saves_dir(), exist_ok=True)
     return [
-        os.path.join(SAVE_DIR, f)
-        for f in os.listdir(SAVE_DIR)
+        os.path.join(paths.saves_dir(), f)
+        for f in os.listdir(paths.saves_dir())
         if f.endswith(".json")
     ]
 

@@ -36,8 +36,9 @@ import pygame
 SAMPLE_RATE = 44100
 _ASSETS_DIR = os.path.normpath(
     os.path.join(os.path.dirname(__file__), "..", "..", "assets", "sounds"))
-_SETTINGS_PATH = os.path.normpath(
-    os.path.join(os.path.dirname(__file__), "..", "..", "data", "settings.json"))
+
+from src.utils.paths import settings_path as _settings_path
+_SETTINGS_PATH = _settings_path()
 
 
 # ── Synthesis helpers ─────────────────────────────────────────────────────────

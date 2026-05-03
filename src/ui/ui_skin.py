@@ -20,9 +20,11 @@ Total sheet minimum size: 18 × 108 px.  Add more rows as needed.
 import os
 import pygame
 
+from src.utils.paths import asset_path as _asset_path
+
 # ── Sheet config ──────────────────────────────────────────────────────────────
 
-_SHEET_PATH = os.path.join("assets", "ui", "ui_sheet.png")
+_SHEET_PATH = _asset_path("assets", "ui", "ui_sheet.png")
 SLICE = 6          # corner/edge size in pixels on the source sheet
 _BLOCK = SLICE * 3  # one 9-slice block height = 18 px
 

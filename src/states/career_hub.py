@@ -12,6 +12,7 @@ Tabs
 import os
 import pygame
 
+from src.utils.paths      import asset_path as _asset_path
 from src.golf.club        import CLUB_SETS, CLUB_SET_ORDER
 from src.golf.ball_types  import BALL_TYPES, BALL_ORDER, effect_summary as ball_effect_summary
 from src.career.player    import STAT_KEYS, BASE_STAT, MAX_STAT, ACHIEVEMENTS
@@ -25,7 +26,7 @@ from src.ui.flags           import draw_flag, FLAG_W, FLAG_H
 
 
 def _load_tab_icon(filename):
-    path = os.path.join("assets", "ui", filename)
+    path = _asset_path("assets", "ui", filename)
     try:
         img = pygame.image.load(path).convert_alpha()
         return pygame.transform.scale(img, (16, 16))

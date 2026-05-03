@@ -7,4 +7,4 @@
 #   False → the game loads JSON courses from data/courses/ first (normal mode).
 #            Flip this to False when your custom courses are complete.
 #
-USE_GENERATED_COURSES = True
+USE_GENERATED_COURSES = False

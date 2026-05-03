@@ -37,7 +37,8 @@ from __future__ import annotations
 import os
 import pygame
 
-_FONT_DIR = os.path.join("assets", "fonts")
+from src.utils.paths import asset_path as _asset_path
+_FONT_DIR = _asset_path("assets", "fonts")
 
 # Physical files we look for. Missing → we fall back to SysFont.
 _BODY_TTF    = "PixelOperator.ttf"
