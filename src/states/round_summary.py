@@ -86,6 +86,17 @@ class RoundSummaryState:
         from src.career.service import CareerService
         self._tourn_result = CareerService(game).record_round(course, scores)
 
+        # ── Q-School cut line (Phase 14) ──────────────────────────────────────
+        # Computed once, immediately after recording round 1.
+        self._qschool_cut_status: str | None = None  # "safe"/"bubble"/"cut"
+        self._qschool_cut_line: int | None   = None
+        self._qschool_player_pos: int | None = None
+        if (self._tournament is not None
+                and getattr(self._tournament, "is_qschool", False)
+                and len(self._tournament.player_rounds) == 1
+                and not getattr(self._tournament, "missed_cut", False)):
+            self._compute_qschool_cut()
+
         # ── Fonts ─────────────────────────────────────────────────────────────
         self.font_title  = fonts.heading(42)
         self.font_large  = fonts.heading(28)
@@ -135,6 +146,24 @@ class RoundSummaryState:
             if d > worst_d:
                 worst_d, worst_i = d, i
         return worst_i, worst_d
+
+    def _compute_qschool_cut(self):
+        """Determine Q-School round-1 cut and update the tournament."""
+        from src.career.tournament import QSCHOOL_CUT_POSITION
+        t  = self._tournament
+        lb = t.get_leaderboard()
+        cut_idx = min(QSCHOOL_CUT_POSITION, len(lb)) - 1
+        t.cut_line = lb[cut_idx]["vs_par"] if cut_idx >= 0 else 0
+        self._qschool_cut_line = t.cut_line
+        player_pos = next((i + 1 for i, e in enumerate(lb) if e["is_player"]), None)
+        self._qschool_player_pos = player_pos
+        if player_pos is not None and player_pos > QSCHOOL_CUT_POSITION:
+            t.missed_cut = True
+            self._qschool_cut_status = "cut"
+        elif player_pos is not None and player_pos >= QSCHOOL_CUT_POSITION - 2:
+            self._qschool_cut_status = "bubble"
+        else:
+            self._qschool_cut_status = "safe"
 
     # ── Event handling ────────────────────────────────────────────────────────
 
@@ -234,8 +263,29 @@ class RoundSummaryState:
         desc_surf = self.font_medium.render(desc, True, desc_color)
         surface.blit(desc_surf, (cx - desc_surf.get_width() // 2, offset_y + 34))
 
+        # ── Q-School cut line banner (Phase 14) ──────────────────────────────
+        qs_banner_h = 0
+        if self._qschool_cut_line is not None and self._qschool_cut_status is not None:
+            qs_banner_h = 38
+            from src.career.tournament import QSCHOOL_CUT_POSITION
+            cut_str = _vs_par_str(self._qschool_cut_line)
+            status = self._qschool_cut_status
+            if status == "cut":
+                banner_col = C_RED
+                status_txt = f"Below cut — Round 2 not played (cut: {cut_str}, pos: {self._qschool_player_pos})"
+            elif status == "bubble":
+                banner_col = C_YELLOW
+                status_txt = f"On the bubble — narrowly made cut (cut: {cut_str}, pos: {self._qschool_player_pos})"
+            else:
+                banner_col = C_GREEN
+                status_txt = f"Safe — made the cut (cut: {cut_str}, pos: {self._qschool_player_pos})"
+            cut_lbl = self.font_medium.render(
+                f"Q-School Cut  •  Top {QSCHOOL_CUT_POSITION} advance  •  {status_txt}",
+                True, banner_col)
+            surface.blit(cut_lbl, (cx - cut_lbl.get_width() // 2, offset_y + 72))
+
         # ── Main content: leaderboard (tournament) or scorecard (free play) ───
-        content_y = offset_y + 72
+        content_y = offset_y + 72 + qs_banner_h
         if t is not None:
             fmt = getattr(t, "format", "stroke")
             if fmt == "stableford":

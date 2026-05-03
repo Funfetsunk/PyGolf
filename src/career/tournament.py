@@ -7,6 +7,11 @@ Standard event : 1 round (18 holes).  Complete after the player finishes
 Major event    : 2 rounds (Grand Tour only).  Complete after the player
                  finishes both rounds.
 
+Q-School event : 2 rounds with a cut after round 1.  The top
+                 QSCHOOL_CUT_POSITION players after round 1 advance to round
+                 2; the rest miss the cut (missed_cut = True).  Final top-15
+                 qualify for the World Tour (checked in TourStandingsState).
+
 Opponents' hole-by-hole scores are pre-simulated at tournament creation so
 the outcome is fixed — the player just needs to beat those scores.
 
@@ -46,6 +51,13 @@ skills_result : None for non-skills events; populated by SkillsSession.finalise(
                 for skills events — stores wins and rewards applied.
                 (Skills events use SkillsSession as game.current_tournament, so
                 this field is kept for completeness / future use.)
+
+Phase 14 additions
+------------------
+cut_line      : vs-par score of the last player to make the round-1 cut in
+                Q-School (None until computed after round 1).
+missed_cut    : True when the player finished outside QSCHOOL_CUT_POSITION
+                after round 1 and will not play round 2.
 """
 
 # ── Scoring format constants ──────────────────────────────────────────────────
@@ -90,6 +102,10 @@ EVENTS_PER_SEASON = {1: 8, 2: 10, 3: 13, 4: 15, 5: 17, 6: 22}
 
 # Top-N season-points finishes required to qualify for the Tour Championship
 TOUR_CHAMPIONSHIP_QUALIFIERS = {1: 15, 2: 15, 3: 12, 4: 12, 5: 10, 6: 10}
+
+# Round-1 cut position for Q-School: top N advance to round 2.
+# Field is 31 (player + 30 opponents); cut at 20 mirrors a standard half-field cut.
+QSCHOOL_CUT_POSITION = 20
 
 # Top-N finish required for promotion at end of season
 PROMOTION_THRESHOLD = {1: 3, 2: 5, 3: 3, 4: 5, 5: 10, 6: None}
@@ -166,8 +182,10 @@ class Tournament:
         # for large fields (64-player field → 6 rounds but we only model 4).
         if format == FORMAT_MATCH_PLAY and opponents:
             self.total_rounds = min(4, max(2, len(opponents)))
+        elif is_major or is_qschool:
+            self.total_rounds = 2
         else:
-            self.total_rounds = 2 if is_major else 1
+            self.total_rounds = 1
         self.event_number = event_number
         self.total_events = total_events
         if is_major:
@@ -254,6 +272,11 @@ class Tournament:
             self.wind_strength_floor = 2
         else:
             self.wind_strength_floor = 0
+
+        # ── Q-School cut line (Phase 14) ─────────────────────────────────────
+        # Computed by RoundSummaryState after round 1 of Q-School.
+        self.cut_line:   int | None = None
+        self.missed_cut: bool       = False
 
         # ── Skills event result (Phase 8) ────────────────────────────────────
         # Populated by SkillsSession.finalise(); None for non-skills events.
@@ -491,6 +514,8 @@ class Tournament:
     def is_complete(self) -> bool:
         if getattr(self, "match_eliminated", False):
             return True
+        if getattr(self, "missed_cut", False):
+            return True
         return len(self.player_rounds) >= self.total_rounds
 
     # ── Live leaderboard (during a round) ────────────────────────────────────
@@ -630,6 +655,10 @@ class Tournament:
             if self._match_final_position is not None:
                 return self._match_final_position
             return len(self.opponents) + 1
+        # Player missed the Q-School cut — they didn't play round 2, so rank
+        # them last (guarantees no promotion in TourStandingsState).
+        if getattr(self, "missed_cut", False):
+            return len(self.opponents) + 1
         lb = (self.get_stableford_final_leaderboard()
               if self.format == FORMAT_STABLEFORD
               else self.get_leaderboard())
@@ -699,6 +728,9 @@ class Tournament:
             "promotion_wildcard":     self.promotion_wildcard,
             # Phase 8 — skills event result
             "skills_result":          self.skills_result,
+            # Phase 14 — Q-School cut
+            "cut_line":               self.cut_line,
+            "missed_cut":             self.missed_cut,
         }
 
     @classmethod
@@ -751,4 +783,7 @@ class Tournament:
         t.promotion_wildcard     = data.get("promotion_wildcard",     False)
         # Phase 8 — skills event result
         t.skills_result          = data.get("skills_result",          None)
+        # Phase 14 — Q-School cut
+        t.cut_line               = data.get("cut_line",               None)
+        t.missed_cut             = data.get("missed_cut",             False)
         return t

@@ -190,8 +190,28 @@ class TournamentResultsState:
             sb = self.font_medium.render(sb_txt, True, C_GREEN)
             surface.blit(sb, (cx - sb.get_width() // 2, 118))
 
-        # ── Tour Championship extras ──────────────────────────────────────────
+        # ── Q-School result banner (Phase 14) ────────────────────────────────
         extra_y = 140
+        if getattr(t, "is_qschool", False):
+            missed = getattr(t, "missed_cut", False)
+            cut_line = getattr(t, "cut_line", None)
+            if missed:
+                cut_str = (_vs_par_str(cut_line) if cut_line is not None else "—")
+                qs_txt = f"Missed the cut — Round 2 not played  (cut line: {cut_str})"
+                qs_col = C_RED
+            else:
+                pos = r.get("position", 999)
+                if pos <= 15:
+                    qs_txt = f"QUALIFIED for the World Tour!  (finished {self._ordinal(pos)})"
+                    qs_col = C_GOLD
+                else:
+                    qs_txt = f"Did not qualify  (finished {self._ordinal(pos)}, top 15 needed)"
+                    qs_col = C_RED
+            qs_surf = self.font_large.render(qs_txt, True, qs_col)
+            surface.blit(qs_surf, (cx - qs_surf.get_width() // 2, extra_y))
+            extra_y += 28
+
+        # ── Tour Championship extras ──────────────────────────────────────────
         if getattr(t, "is_finale", False):
             offsets = getattr(t, "starting_score_offset", {})
             non_zero = {name: v for name, v in offsets.items() if v != 0}
