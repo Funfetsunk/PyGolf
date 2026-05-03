@@ -8,6 +8,14 @@ See [CHANGELOG.md](CHANGELOG.md) for a history of changes.
 
 ## Quick Start
 
+### Windows — No Python Required
+
+Download the latest `LetsGolf.zip` from the [Releases](https://github.com/Funfetsunk/PyGolf/releases) page, extract it, and run `LetsGolf.exe`. No installation needed.
+
+Saves and settings are stored in `%APPDATA%\LetsGolf\` (created automatically on first run).
+
+### Run from Source
+
 ```bash
 # 1. Clone the repo
 git clone https://github.com/Funfetsunk/PyGolf.git
@@ -23,6 +31,14 @@ python main.py
 > **Note:** The game uses `pygame-ce` (the community edition fork), not standard `pygame`. If you have standard `pygame` installed, uninstall it first: `pip uninstall pygame`
 
 **Python 3.11+ required.**
+
+### Build the EXE Yourself
+
+```bash
+pip install pyinstaller
+pyinstaller letsgolf.spec
+# Output: dist/LetsGolf/ — zip this folder for distribution
+```
 
 ---
 

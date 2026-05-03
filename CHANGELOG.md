@@ -2,6 +2,20 @@
 
 All notable changes to Let's Golf! are documented here.
 
+## 2026-05-03 — Windows EXE Distribution (PyInstaller)
+
+### Added
+- **Standalone Windows build** via PyInstaller (`letsgolf.spec`) — produces `dist/LetsGolf/LetsGolf.exe`, no Python required
+- `src/utils/paths.py` — frozen-aware path resolver; writable data (`saves/`, `settings.json`) redirect to `%APPDATA%\LetsGolf\` in the frozen build; read-only assets resolve via `sys._MEIPASS`
+- Save system, sound manager, fonts, UI skin, and career hub updated to use `paths.*` helpers instead of bare relative paths
+- `data/game_config.json` bundled as a read-only asset; `settings.json` excluded from bundle (user-writable)
+- App icon placeholder at `assets/ui/icon.ico` — replace with a valid `.ico` to apply a custom window icon
+
+### Changed
+- `dev_config.USE_GENERATED_COURSES` set to `False` for distribution builds
+
+---
+
 ## 2026-05-02 — Phase 13: Visual & Atmospheric Polish
 
 ### Added
