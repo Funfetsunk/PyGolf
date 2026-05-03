@@ -10,7 +10,7 @@ See [CHANGELOG.md](CHANGELOG.md) for a history of changes.
 
 ### Windows — No Python Required
 
-Download the latest `LetsGolf.zip` from the [Releases](https://github.com/Funfetsunk/PyGolf/releases) page, extract it, and run `LetsGolf.exe`. No installation needed.
+Build the EXE (see below), unzip the `dist/LetsGolf/` folder, and run `LetsGolf.exe`. No installation needed.
 
 Saves and settings are stored in `%APPDATA%\LetsGolf\` (created automatically on first run).
 
