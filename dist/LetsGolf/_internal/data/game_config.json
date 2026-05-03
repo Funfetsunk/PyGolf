@@ -1,0 +1,7 @@
+{
+  "shot_physics": {
+    "shape_curve_fraction": 0.15,
+    "scatter_lateral": 0.40,
+    "scatter_distance": 0.12
+  }
+}

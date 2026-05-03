@@ -796,6 +796,8 @@ class CareerHubState:
             self._draw_tab1(surface)
         elif self._tab == 2:
             self._draw_tab2(surface)
+        elif self._tab == 3:
+            self._draw_tab3(surface)
 
         # Flash message. Drawn LAST as a rounded banner floating just inside
         # the top of the content area so it can't collide with the tab row
@@ -812,8 +814,6 @@ class CareerHubState:
             pygame.draw.rect(surface, (20, 28, 18), banner, border_radius=6)
             pygame.draw.rect(surface, C_GOLD,       banner, 1, border_radius=6)
             surface.blit(ms, ms.get_rect(center=banner.center))
-        elif self._tab == 3:
-            self._draw_tab3(surface)
 
     # ── Tab 0 — Training & Equipment ──────────────────────────────────────────
 
